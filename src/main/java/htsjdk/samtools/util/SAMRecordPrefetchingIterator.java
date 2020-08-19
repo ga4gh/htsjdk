@@ -12,7 +12,7 @@ import htsjdk.samtools.SAMRecord;
 public class SAMRecordPrefetchingIterator implements CloseableIterator<SAMRecord> {
 
     private static final class SAMRecordPrefetchingGuard implements AsyncPrefetchingIterator.Guard<SAMRecord> {
-        private final int basePrefetchLimit;
+        private int basePrefetchLimit;
         private int basesAllowed;
 
         public SAMRecordPrefetchingGuard(final int basePrefetchLimit) {
@@ -38,6 +38,11 @@ public class SAMRecordPrefetchingIterator implements CloseableIterator<SAMRecord
 
         public int readsInQueue() {
             return this.basePrefetchLimit - this.basesAllowed;
+        }
+
+        public void setBasePrefetchLimit(final int newLimit) {
+            this.basesAllowed += (newLimit - this.basePrefetchLimit);
+            this.basePrefetchLimit = newLimit;
         }
     }
 
@@ -73,6 +78,13 @@ public class SAMRecordPrefetchingIterator implements CloseableIterator<SAMRecord
     public int readsInQueue() {
         synchronized (this.guard) {
             return this.guard.readsInQueue();
+        }
+    }
+
+    public void setBasePrefetchLimit(final int newLimit) {
+        synchronized (this.guard) {
+            this.guard.setBasePrefetchLimit(newLimit);
+            this.guard.notify();
         }
     }
 }

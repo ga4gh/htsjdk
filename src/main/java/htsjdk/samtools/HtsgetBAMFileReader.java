@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
 public class HtsgetBAMFileReader extends SamReader.ReaderImplementation {
     public static final String HTSGET_SCHEME = "htsget";
     // Number of bases to read ahead by if using asynchronous IO
-    private static final int READAHEAD_LIMIT = 500_000;
+    private int readaheadLimit = 500_000;
 
     private final URI mSource;
 
@@ -178,6 +178,18 @@ public class HtsgetBAMFileReader extends SamReader.ReaderImplementation {
         this.mReader = enabled ? reader : null;
     }
 
+    /**
+     * Set the number of bases to prefetch ahead by, if asynchronous IO is enabled
+     */
+    public void setReadaheadLimit(final int newLimit) {
+        this.readaheadLimit = newLimit;
+        this.iterators.forEach(iter -> {
+            if (iter instanceof SAMRecordPrefetchingIterator) {
+                ((SAMRecordPrefetchingIterator) iter).setBasePrefetchLimit(newLimit);
+            }
+        });
+    }
+
     @Override
     void enableIndexCaching(final boolean enabled) {
         throw new UnsupportedOperationException("Cannot enable index caching in HtsgetBAMFileReader");
@@ -301,7 +313,7 @@ public class HtsgetBAMFileReader extends SamReader.ReaderImplementation {
     public CloseableIterator<SAMRecord> query(final List<Locatable> intervals, final boolean contained) {
         final CloseableIterator<SAMRecord> chainingIterator = new BAMQueryChainingIterator(intervals, contained);
         final CloseableIterator<SAMRecord> queryIterator = this.mUseAsynchronousIO
-            ? new SAMRecordPrefetchingIterator(chainingIterator, READAHEAD_LIMIT)
+            ? new SAMRecordPrefetchingIterator(chainingIterator, readaheadLimit)
             : chainingIterator;
         this.iterators.add(queryIterator);
         return queryIterator;
@@ -332,7 +344,7 @@ public class HtsgetBAMFileReader extends SamReader.ReaderImplementation {
             final BAMStartingAtIteratorFilter filter = new BAMStartingAtIteratorFilter(referenceIndex, start);
             final CloseableIterator<SAMRecord> filteringIterator = new BAMQueryFilteringIterator(iterator, filter);
             final CloseableIterator<SAMRecord> queryIterator = this.mUseAsynchronousIO
-                ? new SAMRecordPrefetchingIterator(filteringIterator, READAHEAD_LIMIT)
+                ? new SAMRecordPrefetchingIterator(filteringIterator, readaheadLimit)
                 : filteringIterator;
             this.iterators.add(queryIterator);
             return queryIterator;
@@ -353,7 +365,7 @@ public class HtsgetBAMFileReader extends SamReader.ReaderImplementation {
             .withInterval(HtsgetRequest.UNMAPPED_UNPLACED_INTERVAL);
         final CloseableIterator<SAMRecord> unmappedIterator = new HtsgetBAMFileIterator(req);
         final CloseableIterator<SAMRecord> queryIterator = this.mUseAsynchronousIO
-            ? new SAMRecordPrefetchingIterator(unmappedIterator, READAHEAD_LIMIT)
+            ? new SAMRecordPrefetchingIterator(unmappedIterator, readaheadLimit)
             : unmappedIterator;
         this.iterators.add(queryIterator);
         return queryIterator;
