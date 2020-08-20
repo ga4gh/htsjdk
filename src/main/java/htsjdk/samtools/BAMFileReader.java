@@ -351,7 +351,7 @@ public class BAMFileReader extends SamReader.ReaderImplementation {
      * @param enabled true to write source information into each SAMRecord.
      */
     @Override
-    void enableFileSource(final SamReader reader, final boolean enabled) {
+    public void enableFileSource(final SamReader reader, final boolean enabled) {
         this.mReader = enabled ? reader : null;
     }
 
@@ -360,7 +360,7 @@ public class BAMFileReader extends SamReader.ReaderImplementation {
      * @param enabled true to use the caching version of the reader.
      */
     @Override
-    protected void enableIndexCaching(final boolean enabled) {
+    public void enableIndexCaching(final boolean enabled) {
         if(mIndex != null)
             throw new SAMException("Unable to turn on index caching; index file has already been loaded.");
         this.mEnableIndexCaching = enabled;
@@ -372,15 +372,21 @@ public class BAMFileReader extends SamReader.ReaderImplementation {
      * @param enabled True to use memory mapping, false to use regular I/O.
      */
     @Override
-    protected void enableIndexMemoryMapping(final boolean enabled) {
+    public void enableIndexMemoryMapping(final boolean enabled) {
         if (mIndex != null) {
             throw new SAMException("Unable to change index memory mapping; index file has already been loaded.");
         }
         this.mEnableIndexMemoryMapping = enabled;
     }
 
-    @Override void enableCrcChecking(final boolean enabled) {
+    @Override
+    public void enableCrcChecking(final boolean enabled) {
         this.mCompressedInputStream.setCheckCrcs(enabled);
+    }
+
+    @Override
+    public void enableEagerDecode(final boolean enabled) {
+        this.eagerDecode = enabled;
     }
 
     @Override void setSAMRecordFactory(final SAMRecordFactory samRecordFactory) { this.samRecordFactory = samRecordFactory; }
@@ -444,8 +450,6 @@ public class BAMFileReader extends SamReader.ReaderImplementation {
 
         return null;
     }
-
-    public void setEagerDecode(final boolean desired) { this.eagerDecode = desired; }
 
     @Override
     public void close() {

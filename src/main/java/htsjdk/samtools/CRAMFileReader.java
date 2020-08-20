@@ -219,20 +219,15 @@ public class CRAMFileReader extends SamReader.ReaderImplementation implements Sa
     }
 
     @Override
-    void enableIndexCaching(final boolean enabled) {
+    public void enableIndexCaching(final boolean enabled) {
         // relevant to BAI only
         mEnableIndexCaching = enabled;
     }
 
     @Override
-    void enableIndexMemoryMapping(final boolean enabled) {
+    public void enableIndexMemoryMapping(final boolean enabled) {
         // relevant to BAI only
         mEnableIndexMemoryMapping = enabled;
-    }
-
-    @Override
-    void enableCrcChecking(final boolean enabled) {
-        // inapplicable to CRAM: do nothing
     }
 
     @Override
@@ -431,7 +426,7 @@ public class CRAMFileReader extends SamReader.ReaderImplementation implements Sa
     }
 
     @Override
-    void enableFileSource(final SamReader reader, final boolean enabled) {
+    public void enableFileSource(final SamReader reader, final boolean enabled) {
         if (iterator != null) {
             iterator.setFileSource(enabled ? reader : null);
         }

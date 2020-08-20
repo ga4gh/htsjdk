@@ -77,6 +77,8 @@ import java.util.zip.GZIPInputStream;
  */
 public abstract class SamReaderFactory {
 
+    private static final Log LOG = Log.getInstance(SamReaderFactory.class);
+
     private static ValidationStringency defaultValidationStringency = ValidationStringency.DEFAULT_STRINGENCY;
 
     abstract public SamReader open(final File file);
@@ -291,8 +293,11 @@ public abstract class SamReaderFactory {
 
         @Override
         public void reapplyOptions(final SamReader reader) {
-            for (final Option option : enabledOptions) {
-                option.applyTo((SamReader.PrimitiveSamReaderToSamReaderAdapter) reader);
+            for (final Option option : Option.values()) {
+                option.applyTo(
+                    (SamReader.PrimitiveSamReaderToSamReaderAdapter) reader,
+                    enabledOptions.contains(option)
+                );
             }
         }
 
@@ -450,7 +455,7 @@ public abstract class SamReaderFactory {
                         new SamReader.PrimitiveSamReaderToSamReaderAdapter(primitiveSamReader, resource);
 
                 for (final Option option : enabledOptions) {
-                    option.applyTo(reader);
+                    option.applyTo(reader, true);
                 }
 
                 return reader;
@@ -477,39 +482,16 @@ public abstract class SamReaderFactory {
         }
     }
 
-    /** A collection of binary {@link SamReaderFactory} options. */
+    /**
+     * A collection of binary {@link SamReaderFactory} options.
+     */
     public enum Option {
         /**
          * The factory's {@link SamReader}s will produce populated (non-null) values when calling {@link SAMRecord#getFileSource()}.
          * <p/>
          * This option increases memory footprint slightly per {@link htsjdk.samtools.SAMRecord}.
          */
-        INCLUDE_SOURCE_IN_RECORDS {
-            @Override
-            void applyTo(final BAMFileReader underlyingReader, final SamReader reader) {
-                underlyingReader.enableFileSource(reader, true);
-            }
-
-            @Override
-            void applyTo(final SAMTextReader underlyingReader, final SamReader reader) {
-                underlyingReader.enableFileSource(reader, true);
-            }
-
-            @Override
-            void applyTo(final CRAMFileReader underlyingReader, final SamReader reader) {
-                underlyingReader.enableFileSource(reader, true);
-            }
-
-            @Override
-            void applyTo(final SRAFileReader underlyingReader, final SamReader reader) {
-                underlyingReader.enableFileSource(reader, true);
-            }
-
-            @Override
-            void applyTo(final HtsgetBAMFileReader underlyingReader, final SamReader reader) {
-                underlyingReader.enableFileSource(reader, true);
-            }
-        },
+        INCLUDE_SOURCE_IN_RECORDS,
 
         /**
          * The factory's {@link SamReader}s' {@link SamReader#indexing()}'s calls to {@link SamReader.Indexing#getIndex()} will produce
@@ -518,32 +500,7 @@ public abstract class SamReaderFactory {
          * @see SamReader#indexing()
          * @see htsjdk.samtools.SamReader.Indexing#getIndex()
          */
-        CACHE_FILE_BASED_INDEXES {
-            @Override
-            void applyTo(final BAMFileReader underlyingReader, final SamReader reader) {
-                underlyingReader.enableIndexCaching(true);
-            }
-
-            @Override
-            void applyTo(final SAMTextReader underlyingReader, final SamReader reader) {
-                logDebugIgnoringOption(reader, this);
-            }
-
-            @Override
-            void applyTo(final CRAMFileReader underlyingReader, final SamReader reader) {
-                underlyingReader.enableIndexCaching(true);
-            }
-
-            @Override
-            void applyTo(final SRAFileReader underlyingReader, final SamReader reader) {
-                underlyingReader.enableIndexCaching(true);
-            }
-
-            @Override
-            void applyTo(final HtsgetBAMFileReader underlyingReader, final SamReader reader) {
-                logDebugIgnoringOption(reader, this);
-            }
-        },
+        CACHE_FILE_BASED_INDEXES,
 
         /**
          * The factory's {@link SamReader}s' will not use memory mapping for accessing index files (which is used by default).  This is
@@ -552,130 +509,44 @@ public abstract class SamReaderFactory {
          * @see SamReader#indexing()
          * @see htsjdk.samtools.SamReader.Indexing#getIndex()
          */
-        DONT_MEMORY_MAP_INDEX {
-            @Override
-            void applyTo(final BAMFileReader underlyingReader, final SamReader reader) {
-                underlyingReader.enableIndexMemoryMapping(false);
-            }
-
-            @Override
-            void applyTo(final SAMTextReader underlyingReader, final SamReader reader) {
-                logDebugIgnoringOption(reader, this);
-            }
-
-            @Override
-            void applyTo(final CRAMFileReader underlyingReader, final SamReader reader) {
-                underlyingReader.enableIndexMemoryMapping(false);
-            }
-
-            @Override
-            void applyTo(final SRAFileReader underlyingReader, final SamReader reader) {
-                underlyingReader.enableIndexMemoryMapping(false);
-            }
-
-            @Override
-            void applyTo(final HtsgetBAMFileReader underlyingReader, final SamReader reader) {
-                logDebugIgnoringOption(reader, this);
-            }
-        },
+        DONT_MEMORY_MAP_INDEX,
 
         /**
          * Eagerly decode {@link htsjdk.samtools.SamReader}'s {@link htsjdk.samtools.SAMRecord}s, which can reduce memory footprint if many
          * fields are being read per record, or if fields are going to be updated.
          */
-        EAGERLY_DECODE {
-            @Override
-            void applyTo(final BAMFileReader underlyingReader, final SamReader reader) {
-                underlyingReader.setEagerDecode(true);
-            }
-
-            @Override
-            void applyTo(final SAMTextReader underlyingReader, final SamReader reader) {
-                logDebugIgnoringOption(reader, this);
-            }
-
-            @Override
-            void applyTo(final CRAMFileReader underlyingReader, final SamReader reader) {
-                logDebugIgnoringOption(reader, this);
-            }
-
-            @Override
-            void applyTo(final SRAFileReader underlyingReader, final SamReader reader) {
-                logDebugIgnoringOption(reader, this);
-            }
-
-            @Override
-            void applyTo(final HtsgetBAMFileReader underlyingReader, final SamReader reader) {
-                underlyingReader.setEagerDecode(true);
-            }
-        },
+        EAGERLY_DECODE,
 
         /**
          * For {@link htsjdk.samtools.SamReader}s backed by block-compressed streams, enable CRC validation of those streams.  This is an
          * expensive operation, but serves to ensure validity of the stream.
          */
-        VALIDATE_CRC_CHECKSUMS {
-            @Override
-            void applyTo(final BAMFileReader underlyingReader, final SamReader reader) {
-                underlyingReader.enableCrcChecking(true);
-            }
+        VALIDATE_CRC_CHECKSUMS,
+        ;
 
-            @Override
-            void applyTo(final SAMTextReader underlyingReader, final SamReader reader) {
-                logDebugIgnoringOption(reader, this);
+        void applyTo(final SamReader.PrimitiveSamReaderToSamReaderAdapter adapter, final boolean enable) {
+            final SamReader.PrimitiveSamReader underlyingReader = adapter.underlyingReader();
+            switch (this) {
+                case INCLUDE_SOURCE_IN_RECORDS:
+                    underlyingReader.enableFileSource(adapter, enable);
+                    break;
+                case CACHE_FILE_BASED_INDEXES:
+                    underlyingReader.enableIndexCaching(enable);
+                    break;
+                case DONT_MEMORY_MAP_INDEX:
+                    underlyingReader.enableIndexMemoryMapping(!enable);
+                    break;
+                case EAGERLY_DECODE:
+                    underlyingReader.enableEagerDecode(enable);
+                    break;
+                case VALIDATE_CRC_CHECKSUMS:
+                    underlyingReader.enableCrcChecking(enable);
+                    break;
+                default:
+                    LOG.warn("Unrecognized option: " + this);
             }
-
-            @Override
-            void applyTo(final CRAMFileReader underlyingReader, final SamReader reader) {
-                logDebugIgnoringOption(reader, this);
-            }
-
-            @Override
-            void applyTo(final SRAFileReader underlyingReader, final SamReader reader) {
-                logDebugIgnoringOption(reader, this);
-            }
-
-            @Override
-            void applyTo(final HtsgetBAMFileReader underlyingReader, final SamReader reader) {
-                underlyingReader.enableCrcChecking(true);
-            }
-        };
+        }
 
         public static final EnumSet<Option> DEFAULTS = EnumSet.noneOf(Option.class);
-
-        /** Applies this option to the provided reader, if applicable. */
-        void applyTo(final SamReader.PrimitiveSamReaderToSamReaderAdapter reader) {
-            final SamReader.PrimitiveSamReader underlyingReader = reader.underlyingReader();
-            if (underlyingReader instanceof BAMFileReader) {
-                applyTo((BAMFileReader) underlyingReader, reader);
-            } else if (underlyingReader instanceof SAMTextReader) {
-                applyTo((SAMTextReader) underlyingReader, reader);
-            } else if (underlyingReader instanceof CRAMFileReader) {
-                applyTo((CRAMFileReader) underlyingReader, reader);
-            } else if (underlyingReader instanceof SRAFileReader) {
-                applyTo((SRAFileReader) underlyingReader, reader);
-            } else if (underlyingReader instanceof HtsgetBAMFileReader) {
-                applyTo((HtsgetBAMFileReader) underlyingReader, reader);
-            } else {
-                throw new IllegalArgumentException(String.format("Unrecognized reader type: %s.", underlyingReader.getClass()));
-            }
-
-        }
-
-        private static void logDebugIgnoringOption(final SamReader r, final Option option) {
-            LOG.debug(String.format("Ignoring %s option; does not apply to %s readers.", option, r.getClass().getSimpleName()));
-        }
-
-        private final static Log LOG = Log.getInstance(Option.class);
-
-        abstract void applyTo(final BAMFileReader underlyingReader, final SamReader reader);
-
-        abstract void applyTo(final SAMTextReader underlyingReader, final SamReader reader);
-
-        abstract void applyTo(final CRAMFileReader underlyingReader, final SamReader reader);
-
-        abstract void applyTo(final SRAFileReader underlyingReader, final SamReader reader);
-
-        abstract void applyTo(final HtsgetBAMFileReader underlyingReader, final SamReader reader);
     }
 }

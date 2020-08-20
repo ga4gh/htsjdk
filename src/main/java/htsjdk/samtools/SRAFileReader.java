@@ -222,27 +222,6 @@ public class SRAFileReader extends SamReader.ReaderImplementation implements Sam
         return (SAMRecordIterator) it;
     }
 
-    /** ReaderImplementation */
-    @Override
-    void enableFileSource(final SamReader reader, final boolean enabled) {
-        log.info("enableFileSource is not supported");
-    }
-
-    @Override
-    void enableIndexCaching(final boolean enabled) {
-        log.info("enableIndexCaching is not supported");
-    }
-
-    @Override
-    void enableIndexMemoryMapping(final boolean enabled) {
-        log.info("enableIndexMemoryMapping is not supported");
-    }
-
-    @Override
-    void enableCrcChecking(final boolean enabled) {
-        log.info("enableCrcChecking is not supported");
-    }
-
     @Override
     void setSAMRecordFactory(final SAMRecordFactory factory) {
         log.info("setSAMRecordFactory is not supported");

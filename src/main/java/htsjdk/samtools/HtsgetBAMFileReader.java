@@ -160,7 +160,8 @@ public class HtsgetBAMFileReader extends SamReader.ReaderImplementation {
     /**
      * Set whether to eagerly decode subsequent SAMRecord reads.
      */
-    public void setEagerDecode(final boolean eagerDecode) {
+    @Override
+    public void enableEagerDecode(final boolean eagerDecode) {
         this.mEagerDecode = eagerDecode;
     }
 
@@ -176,16 +177,6 @@ public class HtsgetBAMFileReader extends SamReader.ReaderImplementation {
      */
     public void enableFileSource(final SamReader reader, final boolean enabled) {
         this.mReader = enabled ? reader : null;
-    }
-
-    @Override
-    void enableIndexCaching(final boolean enabled) {
-        throw new UnsupportedOperationException("Cannot enable index caching in HtsgetBAMFileReader");
-    }
-
-    @Override
-    void enableIndexMemoryMapping(final boolean enabled) {
-        throw new UnsupportedOperationException("Cannot enable index memory mapping in HtsgetBAMFileReader");
     }
 
     @Override

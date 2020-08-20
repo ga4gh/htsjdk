@@ -85,21 +85,6 @@ class SAMTextReader extends SamReader.ReaderImplementation {
     }
 
     @Override
-    void enableIndexCaching(final boolean enabled) {
-        throw new UnsupportedOperationException("Cannot enable index caching for a SAM text reader");
-    }
-
-    @Override
-    void enableIndexMemoryMapping(final boolean enabled) {
-        throw new UnsupportedOperationException("Cannot enable index memory mapping for a SAM text reader");
-    }
-
-    @Override
-    void enableCrcChecking(final boolean enabled) {
-        // Do nothing - this has no meaning for SAM reading
-    }
-
-    @Override
     void setSAMRecordFactory(final SAMRecordFactory factory) {
         this.samRecordFactory = factory;
     }

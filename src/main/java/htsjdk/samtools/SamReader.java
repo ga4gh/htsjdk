@@ -25,6 +25,7 @@
 package htsjdk.samtools;
 
 import htsjdk.samtools.util.CloseableIterator;
+import htsjdk.samtools.util.Log;
 
 import java.io.Closeable;
 import java.text.MessageFormat;
@@ -39,6 +40,8 @@ import java.text.MessageFormat;
  * @author mccowan
  */
 public interface SamReader extends Iterable<SAMRecord>, Closeable {
+
+    Log LOG = Log.getInstance(SamReader.class);
 
     /** Describes a type of SAM file. */
     public abstract class Type {
@@ -380,6 +383,26 @@ public interface SamReader extends Iterable<SAMRecord>, Closeable {
         void close();
 
         ValidationStringency getValidationStringency();
+
+        default void enableFileSource(final SamReader reader, final boolean enabled) {
+            LOG.debug(String.format("Ignoring enableFileSource option; does not apply to %s readers.", this.getClass().getSimpleName()));
+        }
+
+        default void enableIndexCaching(final boolean enabled) {
+            LOG.debug(String.format("Ignoring enableIndexCaching option; does not apply to %s readers.", this.getClass().getSimpleName()));
+        }
+
+        default void enableIndexMemoryMapping(final boolean enabled) {
+            LOG.debug(String.format("Ignoring enableIndexMemoryMapping option; does not apply to %s readers.", this.getClass().getSimpleName()));
+        }
+
+        default void enableCrcChecking(final boolean enabled) {
+            LOG.debug(String.format("Ignoring enableCrcChecking option; does not apply to %s readers.", this.getClass().getSimpleName()));
+        }
+
+        default void enableEagerDecode(final boolean enabled) {
+            LOG.debug(String.format("Ignoring enableEagerDecode option; does not apply to %s readers.", this.getClass().getSimpleName()));
+        }
     }
 
     /**
@@ -623,14 +646,6 @@ public interface SamReader extends Iterable<SAMRecord>, Closeable {
      * TODO -- perhaps we can get away with not having this class at all.
      */
     abstract class ReaderImplementation implements PrimitiveSamReader {
-        abstract void enableFileSource(final SamReader reader, final boolean enabled);
-
-        abstract void enableIndexCaching(final boolean enabled);
-
-        abstract void enableIndexMemoryMapping(final boolean enabled);
-
-        abstract void enableCrcChecking(final boolean enabled);
-
         abstract void setSAMRecordFactory(final SAMRecordFactory factory);
 
         abstract void setValidationStringency(final ValidationStringency validationStringency);
