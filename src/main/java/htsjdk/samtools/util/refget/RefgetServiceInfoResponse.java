@@ -25,29 +25,30 @@ public class RefgetServiceInfoResponse {
     }
 
     public static RefgetServiceInfoResponse parse(final Json j) {
-        final Json circularSupportedJson = j.at("circular_supported");
+        final Json serviceJson = j.at("service");
+        if (serviceJson == null || !serviceJson.isObject()) {
+            throw new RefgetMalformedResponseException("No service object found");
+        }
+
+        final Json circularSupportedJson = serviceJson.at("circular_supported");
         if (circularSupportedJson == null || !circularSupportedJson.isBoolean()) {
             throw new RefgetMalformedResponseException("No circular_supported boolean found inside Refget service info");
         }
         final boolean circularSupported = circularSupportedJson.asBoolean();
 
-        final Json algorithmsJson = j.at("algorithms");
+        final Json algorithmsJson = serviceJson.at("algorithms");
         if (algorithmsJson == null || !algorithmsJson.isArray()) {
             throw new RefgetMalformedResponseException("No algorithms array found inside Refget service info");
         }
         final List<String> algorithms = algorithmsJson.asJsonList().stream().map(Json::asString).collect(Collectors.toList());
 
-        final Json limitJson = j.at("subsequence_limit");
-        Integer limit = null;
-        if (limitJson != null) {
-            if (!limitJson.isNumber()) {
-                throw new RefgetMalformedResponseException("subsequence_limit object inside Refget service info is not of type number");
-            } else {
-                limit = limitJson.asInteger();
-            }
+        final Json limitJson = serviceJson.at("subsequence_limit");
+        if (limitJson == null || !(limitJson.isNumber() || limitJson.isNull())) {
+            throw new RefgetMalformedResponseException("subsequence_limit object inside Refget service info is not of type number or null");
         }
+        final Integer limit = limitJson.isNull() ? null : limitJson.asInteger();
 
-        final Json versionsJson = j.at("supported_versions");
+        final Json versionsJson = serviceJson.at("supported_api_versions");
         if (versionsJson == null || !versionsJson.isArray()) {
             throw new RefgetMalformedResponseException("No supported_versions array found inside Refget service info");
         }

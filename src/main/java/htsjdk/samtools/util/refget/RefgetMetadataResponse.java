@@ -39,14 +39,11 @@ public class RefgetMetadataResponse {
             final String alias = aliasJson.asString();
 
             final Json authorityJson = j.at("naming_authority");
-            String authority = null;
-            if (authorityJson != null) {
-                if (!authorityJson.isString()) {
-                    throw new RefgetMalformedResponseException("naming_authority object inside Refget metadata alias is not of type string");
-                } else {
-                    authority = authorityJson.asString();
-                }
+            if (authorityJson == null || !authorityJson.isString()) {
+                throw new RefgetMalformedResponseException("naming_authority object inside Refget metadata alias is not of type string");
             }
+            final String authority = authorityJson.asString();
+
             return new Alias(alias, authority);
         }
 
