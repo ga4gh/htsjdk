@@ -1,13 +1,9 @@
 package htsjdk.samtools.util.refget;
 
-import htsjdk.samtools.util.IOUtil;
-import org.apache.commons.compress.utils.IOUtils;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
-import java.util.stream.Collectors;
 
 /**
  * Class that allows making a sequence request against a specified refget server

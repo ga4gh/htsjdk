@@ -14,6 +14,7 @@ public class RefgetServiceInfoRequest {
 
     /**
      * Construct a service info request
+     *
      * @param endpoint resource to request service info for, with "/service-info" suffix
      */
     public RefgetServiceInfoRequest(final URI endpoint) {

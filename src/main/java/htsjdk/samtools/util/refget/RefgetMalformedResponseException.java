@@ -1,7 +1,8 @@
 package htsjdk.samtools.util.refget;
 
 public class RefgetMalformedResponseException extends RuntimeException {
-    public RefgetMalformedResponseException() {}
+    public RefgetMalformedResponseException() {
+    }
 
     public RefgetMalformedResponseException(final String s) {
         super(s);
