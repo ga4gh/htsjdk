@@ -13,11 +13,11 @@ public class RefgetServiceInfoRequest {
     private final URI endpoint;
 
     /**
-     * Construct a metadata request
-     * @param endpoint resource to request metadata for, without "/metadata" suffix
+     * Construct a service info request
+     * @param endpoint resource to request service info for, without "/service-info" suffix
      */
     public RefgetServiceInfoRequest(final URI endpoint) {
-        this.endpoint = endpoint;
+        this.endpoint = URI.create(endpoint.toString() + "/service-info");
     }
 
     public RefgetServiceInfoResponse getResponse() {
@@ -44,7 +44,7 @@ public class RefgetServiceInfoRequest {
                 throw new IllegalStateException("Unrecognized status code: " + statusCode);
             }
         } catch (final IOException e) {
-            throw new RuntimeException("IOException while attempting refget metadata request: " + this.endpoint, e);
+            throw new RuntimeException("IOException while attempting refget service info request: " + this.endpoint, e);
         }
     }
 }

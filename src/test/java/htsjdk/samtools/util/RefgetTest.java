@@ -1,10 +1,7 @@
 package htsjdk.samtools.util;
 
 import htsjdk.HtsjdkTest;
-import htsjdk.samtools.util.refget.RefgetMalformedResponseException;
-import htsjdk.samtools.util.refget.RefgetMetadataResponse;
-import htsjdk.samtools.util.refget.RefgetSequenceRequest;
-import htsjdk.samtools.util.refget.RefgetServiceInfoResponse;
+import htsjdk.samtools.util.refget.*;
 import mjson.Json;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
@@ -15,8 +12,12 @@ import java.net.URI;
 import java.util.List;
 
 public class RefgetTest extends HtsjdkTest {
-    private static final URI testSequence1 = URI.create("https://refget-insdc.jeremy-codes.com/sequence/2085c82d80500a91dd0b8aa9237b0e43f1c07809bd6e6785");
-    private static final String contents = "GAGTTTTATCGCTTCCATGACGC";
+    private static final URI testSequence1 = URI.create("https://www.ebi.ac.uk/ena/cram/sequence/3050107579885e1608e6fe50fae3f8d0");
+    private static final String contents = "TAGCGGGCCTTGTATCTTTTAGAC";
+
+//    private static final URI testSequence1 = URI.create("https://refget-insdc.jeremy-codes.com/sequence/2085c82d80500a91dd0b8aa9237b0e43f1c07809bd6e6785");
+//    private static final String contents = "TTCTCAATCCCCAATGCTTGGCTTCCATAAGCAGATGGATAA";
+
 
     private Json wrapMetadata(final Json j) {
         return Json.object("metadata", j);
@@ -133,5 +134,29 @@ public class RefgetTest extends HtsjdkTest {
         final InputStream input = req.getResponse();
         final String s = IOUtil.readFully(input).substring(0, expected.length());
         Assert.assertEquals(s, expected);
+    }
+
+    @Test
+    public void testRefgetMetadataRequest() {
+        final RefgetMetadataRequest req = new RefgetMetadataRequest(testSequence1);
+        final RefgetMetadataResponse resp = req.getResponse();
+
+        Assert.assertEquals(resp.getLength(), 5386);
+        Assert.assertTrue(resp.getAliases().isEmpty());
+        Assert.assertEquals(resp.getTRUNC512(), "2085c82d80500a91dd0b8aa9237b0e43f1c07809bd6e6785");
+        Assert.assertEquals(resp.getMd5(), "3332ed720ac7eaa9b3655c06f6b9e196");
+    }
+
+    @Test
+    public void testServiceInfoRequest() {
+        final RefgetServiceInfoRequest req = new RefgetServiceInfoRequest(URI.create("https://www.ebi.ac.uk/ena/cram/sequence"));
+        final RefgetServiceInfoResponse resp = req.getResponse();
+
+        Assert.assertFalse(resp.isCircularSupported());
+        Assert.assertEquals(resp.getAlgorithms().size(), 1);
+        Assert.assertEquals(resp.getAlgorithms().get(0), "md5");
+        Assert.assertNull(resp.getSubsequenceLimit());
+        Assert.assertEquals(resp.getSupportedVersions().size(), 1);
+        Assert.assertEquals(resp.getSupportedVersions().get(0), "0.2.0");
     }
 }

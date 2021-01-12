@@ -57,9 +57,9 @@ public class RefgetSequenceRequest {
             if (this.startInclusive != null) {
                 final StringBuilder s = new StringBuilder("bytes=");
                 s.append(this.startInclusive);
+                s.append('-');
                 if (this.endInclusive != null) {
-                    s.append('-');
-                    s.append(this.endInclusive.toString());
+                    s.append(this.endInclusive);
                 }
                 conn.setRequestProperty("Range", s.toString());
             }
