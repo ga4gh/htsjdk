@@ -1,9 +1,13 @@
 package htsjdk.samtools.util.refget;
 
+import htsjdk.samtools.util.IOUtil;
+import org.apache.commons.compress.utils.IOUtils;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
+import java.util.stream.Collectors;
 
 /**
  * Class that allows making a sequence request against a specified refget server
@@ -20,17 +24,6 @@ public class RefgetSequenceRequest {
      */
     public RefgetSequenceRequest(final URI endpoint) {
         this.endpoint = endpoint;
-    }
-
-    /**
-     * Construct a request with only a start and no end
-     *
-     * @param endpoint complete URI of refget resource including ID
-     * @param start    start of request range, 0-based, inclusive
-     */
-    public RefgetSequenceRequest(final URI endpoint, final int start) {
-        this.endpoint = endpoint;
-        this.startInclusive = start;
     }
 
     /**
@@ -52,19 +45,27 @@ public class RefgetSequenceRequest {
      * @return the response from the refget server if request is successful
      */
     public InputStream getResponse() {
+        final HttpURLConnection conn;
         try {
-            final HttpURLConnection conn = (HttpURLConnection) this.endpoint.toURL().openConnection();
+            conn = (HttpURLConnection) this.endpoint.toURL().openConnection();
             if (this.startInclusive != null) {
-                final StringBuilder s = new StringBuilder("bytes=");
-                s.append(this.startInclusive);
-                s.append('-');
-                if (this.endInclusive != null) {
-                    s.append(this.endInclusive);
-                }
-                conn.setRequestProperty("Range", s.toString());
+                final String s = "bytes=" + this.startInclusive + '-' + this.endInclusive;
+                conn.setRequestProperty("Range", s);
             }
 
+            conn.setRequestProperty("Accept", "*/*");
             conn.connect();
+
+            final int status = conn.getResponseCode();
+            if (status == HttpURLConnection.HTTP_MOVED_TEMP
+                || status == HttpURLConnection.HTTP_MOVED_PERM
+                || status == HttpURLConnection.HTTP_SEE_OTHER) {
+                final URI redirect = URI.create(conn.getHeaderField("Location"));
+                final RefgetSequenceRequest req = this.startInclusive == null
+                    ? new RefgetSequenceRequest(redirect)
+                    : new RefgetSequenceRequest(redirect, startInclusive, endInclusive);
+                return req.getResponse();
+            }
             return conn.getInputStream();
         } catch (final IOException e) {
             throw new RuntimeException("IOException while attempting refget sequence request: " + this.endpoint, e);

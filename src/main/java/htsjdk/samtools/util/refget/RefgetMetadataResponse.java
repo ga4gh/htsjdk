@@ -11,13 +11,13 @@ import java.util.stream.Collectors;
  */
 public class RefgetMetadataResponse {
     private final String md5;
-    private final String TRUNC512;
+    private final String trunc512;
     private final int length;
     private final List<Alias> aliases;
 
-    private RefgetMetadataResponse(final String md5, final String TRUNC512, final int length, final List<Alias> aliases) {
+    private RefgetMetadataResponse(final String md5, final String trunc512, final int length, final List<Alias> aliases) {
         this.md5 = md5;
-        this.TRUNC512 = TRUNC512;
+        this.trunc512 = trunc512;
         this.length = length;
         this.aliases = aliases;
     }
@@ -68,16 +68,16 @@ public class RefgetMetadataResponse {
         }
         final String md5 = md5Json.asString();
 
-        final Json TRUNC512Json = dataJson.at("TRUNC512");
-        final String TRUNC512;
-        if (TRUNC512Json == null) {
-            throw new RefgetMalformedResponseException("No TRUNC512 string found inside metadata");
-        } else if (TRUNC512Json.isString()) {
-            TRUNC512 = TRUNC512Json.asString();
-        } else if (TRUNC512Json.isNull()) {
-            TRUNC512 = null;
+        final Json trunc512Json = dataJson.at("trunc512");
+        final String trunc512;
+        if (trunc512Json == null) {
+            throw new RefgetMalformedResponseException("No trunc512 string found inside metadata");
+        } else if (trunc512Json.isString()) {
+            trunc512 = trunc512Json.asString();
+        } else if (trunc512Json.isNull()) {
+            trunc512 = null;
         } else {
-            throw new RefgetMalformedResponseException("TRUNC512 object is not of type string or null");
+            throw new RefgetMalformedResponseException("trunc512 object is not of type string or null");
         }
 
         final Json lengthJson = dataJson.at("length");
@@ -95,15 +95,15 @@ public class RefgetMetadataResponse {
             .map(Alias::parse)
             .collect(Collectors.toList());
 
-        return new RefgetMetadataResponse(md5, TRUNC512, length, aliases);
+        return new RefgetMetadataResponse(md5, trunc512, length, aliases);
     }
 
     public String getMd5() {
         return this.md5;
     }
 
-    public String getTRUNC512() {
-        return this.TRUNC512;
+    public String getTrunc512() {
+        return this.trunc512;
     }
 
     public int getLength() {

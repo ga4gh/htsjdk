@@ -12,12 +12,10 @@ import java.net.URI;
 import java.util.List;
 
 public class RefgetTest extends HtsjdkTest {
-    private static final URI testSequence1 = URI.create("https://www.ebi.ac.uk/ena/cram/sequence/3050107579885e1608e6fe50fae3f8d0");
-    private static final String contents = "TAGCGGGCCTTGTATCTTTTAGAC";
-
-//    private static final URI testSequence1 = URI.create("https://refget-insdc.jeremy-codes.com/sequence/2085c82d80500a91dd0b8aa9237b0e43f1c07809bd6e6785");
-//    private static final String contents = "TTCTCAATCCCCAATGCTTGGCTTCCATAAGCAGATGGATAA";
-
+    private static final URI testSequence1 = URI.create("https://refget-insdc.jeremy-codes.com/sequence/2085c82d80500a91dd0b8aa9237b0e43f1c07809bd6e6785");
+    private static final URI testMetadata = URI.create("https://refget-insdc.jeremy-codes.com/sequence/2085c82d80500a91dd0b8aa9237b0e43f1c07809bd6e6785/metadata");
+    private static final URI testServiceInfo = URI.create("https://refget-insdc.jeremy-codes.com/sequence/service-info");
+    private static final String contents = "GAGTTTTATCGCTTCCATGACGCAGAAG";
 
     private Json wrapMetadata(final Json j) {
         return Json.object("metadata", j);
@@ -27,7 +25,7 @@ public class RefgetTest extends HtsjdkTest {
     public void testDeserializeMetadataResponse() {
         final Json metadata = Json.object();
         metadata.set("md5", "abc");
-        metadata.set("TRUNC512", "def");
+        metadata.set("trunc512", "def");
         metadata.set("length", 2);
         metadata.set("aliases", Json.array(
             Json.object("alias", "alias0", "naming_authority", "authority0"),
@@ -35,7 +33,7 @@ public class RefgetTest extends HtsjdkTest {
 
         final RefgetMetadataResponse resp = RefgetMetadataResponse.parse(wrapMetadata(metadata));
         Assert.assertEquals(resp.getMd5(), "abc");
-        Assert.assertEquals(resp.getTRUNC512(), "def");
+        Assert.assertEquals(resp.getTrunc512(), "def");
         Assert.assertEquals(resp.getLength(), 2);
 
         final List<RefgetMetadataResponse.Alias> aliases = resp.getAliases();
@@ -47,20 +45,20 @@ public class RefgetTest extends HtsjdkTest {
 
     @DataProvider(name = "malformedMetadataResponseProvider")
     public Object[][] malformedMetadataResponseProvider() {
-        final Json noMd5 = wrapMetadata(Json.object("TRUNC512", "abc", "length", 2, "aliases", Json.array()));
-        final Json noTRUNC512 = wrapMetadata(Json.object("md5", "abc", "length", 2, "aliases", Json.array()));
-        final Json noLength = wrapMetadata(Json.object("md5", "abc", "TRUNC512", "def", "aliases", Json.array()));
-        final Json noAliases = wrapMetadata(Json.object("md5", "abc", "TRUNC512", "def", "length", 2));
-        final Json missingAlias = wrapMetadata(Json.object("md5", "abc", "TRUNC512", "def", "length", 2, "aliases", Json.array(
+        final Json noMd5 = wrapMetadata(Json.object("trunc512", "abc", "length", 2, "aliases", Json.array()));
+        final Json notrunc512 = wrapMetadata(Json.object("md5", "abc", "length", 2, "aliases", Json.array()));
+        final Json noLength = wrapMetadata(Json.object("md5", "abc", "trunc512", "def", "aliases", Json.array()));
+        final Json noAliases = wrapMetadata(Json.object("md5", "abc", "trunc512", "def", "length", 2));
+        final Json missingAlias = wrapMetadata(Json.object("md5", "abc", "trunc512", "def", "length", 2, "aliases", Json.array(
             Json.object("naming_authority", "authority")
         )));
-        final Json missingAuthority = wrapMetadata(Json.object("md5", "abc", "TRUNC512", "def", "length", 2, "aliases", Json.array(
+        final Json missingAuthority = wrapMetadata(Json.object("md5", "abc", "trunc512", "def", "length", 2, "aliases", Json.array(
             Json.object("alias", "alias")
         )));
 
         return new Object[][]{
             new Object[]{noMd5},
-            new Object[]{noTRUNC512},
+            new Object[]{notrunc512},
             new Object[]{noLength},
             new Object[]{noAliases},
             new Object[]{missingAlias},
@@ -81,7 +79,7 @@ public class RefgetTest extends HtsjdkTest {
     public void testDeserializeServiceInfoResponse() {
         final Json service = Json.object();
         service.set("circular_supported", true);
-        service.set("algorithms", Json.array("md5", "TRUNC512"));
+        service.set("algorithms", Json.array("md5", "trunc512"));
         service.set("subsequence_limit", Json.nil());
         service.set("supported_api_versions", Json.array("v1", "v2"));
 
@@ -89,7 +87,7 @@ public class RefgetTest extends HtsjdkTest {
         RefgetServiceInfoResponse resp = RefgetServiceInfoResponse.parse(wrapService(service));
         Assert.assertTrue(resp.isCircularSupported());
         Assert.assertEquals(resp.getAlgorithms().get(0), "md5");
-        Assert.assertEquals(resp.getAlgorithms().get(1), "TRUNC512");
+        Assert.assertEquals(resp.getAlgorithms().get(1), "trunc512");
         Assert.assertNull(resp.getSubsequenceLimit());
         Assert.assertEquals(resp.getSupportedVersions().get(0), "v1");
         Assert.assertEquals(resp.getSupportedVersions().get(1), "v2");
@@ -124,7 +122,6 @@ public class RefgetTest extends HtsjdkTest {
     public Object[][] refgetSequenceRequestProvider() {
         return new Object[][]{
             new Object[]{new RefgetSequenceRequest(testSequence1), contents},
-            new Object[]{new RefgetSequenceRequest(testSequence1, 5), contents.substring(5)},
             new Object[]{new RefgetSequenceRequest(testSequence1, 5, 8), contents.substring(5, 8+1)},
         };
     }
@@ -138,25 +135,26 @@ public class RefgetTest extends HtsjdkTest {
 
     @Test
     public void testRefgetMetadataRequest() {
-        final RefgetMetadataRequest req = new RefgetMetadataRequest(testSequence1);
+        final RefgetMetadataRequest req = new RefgetMetadataRequest(testMetadata);
         final RefgetMetadataResponse resp = req.getResponse();
 
         Assert.assertEquals(resp.getLength(), 5386);
         Assert.assertTrue(resp.getAliases().isEmpty());
-        Assert.assertEquals(resp.getTRUNC512(), "2085c82d80500a91dd0b8aa9237b0e43f1c07809bd6e6785");
+        Assert.assertEquals(resp.getTrunc512(), "2085c82d80500a91dd0b8aa9237b0e43f1c07809bd6e6785");
         Assert.assertEquals(resp.getMd5(), "3332ed720ac7eaa9b3655c06f6b9e196");
     }
 
     @Test
     public void testServiceInfoRequest() {
-        final RefgetServiceInfoRequest req = new RefgetServiceInfoRequest(URI.create("https://www.ebi.ac.uk/ena/cram/sequence"));
+        final RefgetServiceInfoRequest req = new RefgetServiceInfoRequest(testServiceInfo);
         final RefgetServiceInfoResponse resp = req.getResponse();
 
         Assert.assertFalse(resp.isCircularSupported());
-        Assert.assertEquals(resp.getAlgorithms().size(), 1);
+        Assert.assertEquals(resp.getAlgorithms().size(), 2);
         Assert.assertEquals(resp.getAlgorithms().get(0), "md5");
-        Assert.assertNull(resp.getSubsequenceLimit());
+        Assert.assertEquals(resp.getAlgorithms().get(1), "trunc512");
+        Assert.assertEquals(resp.getSubsequenceLimit(), Integer.valueOf(300000));
         Assert.assertEquals(resp.getSupportedVersions().size(), 1);
-        Assert.assertEquals(resp.getSupportedVersions().get(0), "0.2.0");
+        Assert.assertEquals(resp.getSupportedVersions().get(0), "1.0");
     }
 }
