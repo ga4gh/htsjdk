@@ -2,6 +2,7 @@ package htsjdk.samtools.util.refget;
 
 import mjson.Json;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -62,7 +63,7 @@ public class RefgetServiceInfoResponse {
     }
 
     public List<String> getAlgorithms() {
-        return this.algorithms;
+        return Collections.unmodifiableList(this.algorithms);
     }
 
     public Integer getSubsequenceLimit() {
@@ -70,6 +71,6 @@ public class RefgetServiceInfoResponse {
     }
 
     public List<String> getSupportedVersions() {
-        return this.supportedVersions;
+        return Collections.unmodifiableList(this.supportedVersions);
     }
 }

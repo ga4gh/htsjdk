@@ -56,7 +56,6 @@ public class RefgetMetadataRequest {
             || status == HttpURLConnection.HTTP_MOVED_PERM
             || status == HttpURLConnection.HTTP_SEE_OTHER) {
             final String redirect = conn.getHeaderField("Location");
-            System.err.println(redirect);
             return new RefgetMetadataRequest(URI.create(redirect)).getResponse();
         } else {
             throw new IllegalStateException("Unrecognized status code: " + status);
