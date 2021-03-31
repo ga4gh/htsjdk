@@ -1,27 +1,27 @@
 /*
-* Copyright (c) 2012 The Broad Institute
-* 
-* Permission is hereby granted, free of charge, to any person
-* obtaining a copy of this software and associated documentation
-* files (the "Software"), to deal in the Software without
-* restriction, including without limitation the rights to use,
-* copy, modify, merge, publish, distribute, sublicense, and/or sell
-* copies of the Software, and to permit persons to whom the
-* Software is furnished to do so, subject to the following
-* conditions:
-* 
-* The above copyright notice and this permission notice shall be
-* included in all copies or substantial portions of the Software.
-* 
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
-* OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-* HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-* WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
-* THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
+ * Copyright (c) 2012 The Broad Institute
+ *
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
+ * THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
 
 package htsjdk.variant.variantcontext.writer;
 
@@ -31,9 +31,13 @@ import htsjdk.variant.variantcontext.VariantContext;
 import htsjdk.variant.vcf.VCFCompoundHeaderLine;
 import htsjdk.variant.vcf.VCFHeaderLineCount;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -66,20 +70,32 @@ public abstract class BCF2FieldEncoder {
      */
     final BCF2Type dictionaryOffsetType;
 
+    /**
+     * The encoder we will use to write out values
+     */
+    final BCF2Encoder encoder;
+
     // ----------------------------------------------------------------------
     //
     // Constructor
     //
     // ----------------------------------------------------------------------
 
-    private BCF2FieldEncoder(final VCFCompoundHeaderLine headerLine, final Map<String, Integer> dict, final BCF2Type staticType) {
+    private BCF2FieldEncoder(
+        final VCFCompoundHeaderLine headerLine,
+        final Map<String, Integer> dict,
+        final BCF2Type staticType,
+        final BCF2Encoder encoder
+    ) {
         this.headerLine = headerLine;
         this.staticType = staticType;
 
         final Integer offset = dict.get(getField());
-        if ( offset == null ) throw new IllegalStateException("Format error: could not find string " + getField() + " in header as required by BCF");
+        if (offset == null)
+            throw new IllegalStateException("Format error: could not find string " + getField() + " in header as required by BCF");
         this.dictionaryOffset = offset;
         dictionaryOffsetType = BCF2Utils.determineIntegerType(offset);
+        this.encoder = encoder;
     }
 
     // ----------------------------------------------------------------------
@@ -88,7 +104,9 @@ public abstract class BCF2FieldEncoder {
     //
     // ----------------------------------------------------------------------
 
-    public final String getField() { return headerLine.getID(); }
+    public final String getField() {
+        return headerLine.getID();
+    }
 
     /**
      * Write the field key (dictionary offset and type) into the BCF2Encoder stream
@@ -136,7 +154,7 @@ public abstract class BCF2FieldEncoder {
      * of the current VariantContext, such as one value per Allele or per genotype configuration.
      */
     public boolean hasContextDeterminedNumElements() {
-        return ! hasConstantNumElements() && ! hasValueDeterminedNumElements();
+        return !hasConstantNumElements() && !hasValueDeterminedNumElements();
     }
 
     /**
@@ -162,28 +180,29 @@ public abstract class BCF2FieldEncoder {
 
     /**
      * A convenience access for the number of elements.
+     *
      * @param vc
      * @param value
      * @return the number of encoded elements, either from the fixed number
      * it has, from the VC, or from the value itself.
      */
     public final int numElements(final VariantContext vc, final Object value) {
-        if ( hasConstantNumElements() ) return numElements();
-        else if ( hasContextDeterminedNumElements() ) return numElements(vc);
+        if (hasConstantNumElements()) return numElements();
+        else if (hasContextDeterminedNumElements()) return numElements(vc);
         else return numElements(value);
     }
 
     /**
      * Given a value, return the number of elements we will encode for it.
-     *
+     * <p>
      * Assumes the value is encoded as a List
      *
      * @param value
      * @return the number of elements we will encode for {@param value}.
      */
     protected int numElementsFromValue(final Object value) {
-        if ( value == null ) return 0;
-        else if ( value instanceof List ) return ((List) value).size();
+        if (value == null) return 0;
+        else if (value instanceof List) return ((List) value).size();
         else return 1;
     }
 
@@ -196,16 +215,22 @@ public abstract class BCF2FieldEncoder {
     /**
      * Is the BCF2 type of this field static, or does it have to be determine from
      * the actual field value itself?
+     *
      * @return true if the field is static
      */
-    public final boolean isStaticallyTyped() { return ! isDynamicallyTyped(); }
+    public final boolean isStaticallyTyped() {
+        return !isDynamicallyTyped();
+    }
 
     /**
      * Is the BCF2 type of this field static, or does it have to be determine from
      * the actual field value itself?
+     *
      * @return true if the field is not static
      */
-    public final boolean isDynamicallyTyped() { return staticType == null; }
+    public final boolean isDynamicallyTyped() {
+        return staticType == null;
+    }
 
     /**
      * Get the BCF2 type for this field, either from the static type of the
@@ -233,25 +258,24 @@ public abstract class BCF2FieldEncoder {
 
     /**
      * Key abstract method that should encode a value of the given type into the encoder.
-     *
+     * <p>
      * Value will be of a type appropriate to the underlying encoder.  If the genotype field is represented as
      * an int[], this will be value, and the encoder needs to handle encoding all of the values in the int[].
-     *
+     * <p>
      * The argument should be used, not the getType() method in the superclass as an outer loop might have
      * decided a more general type (int16) to use, even through this encoder could have been done with int8.
-     *
+     * <p>
      * If minValues &gt; 0, then encodeValue must write in at least minValues items from value.  If value is atomic,
      * this means that minValues - 1 MISSING values should be added to the encoder.  If minValues is a collection
      * type (int[]) then minValues - values.length should be added.  This argument is intended to handle padding
      * of values in genotype fields.
      *
-     * @param encoder
      * @param value
      * @param type
      * @param minValues
      * @throws IOException
      */
-    public abstract void encodeValue(final BCF2Encoder encoder, final Object value, final BCF2Type type, final int minValues) throws IOException;
+    public abstract void encodeValue(final Object value, final BCF2Type type, final int minValues) throws IOException;
 
     // ----------------------------------------------------------------------
     //
@@ -260,14 +284,21 @@ public abstract class BCF2FieldEncoder {
     // ----------------------------------------------------------------------
 
     public static class StringOrCharacter extends BCF2FieldEncoder {
-        public StringOrCharacter(final VCFCompoundHeaderLine headerLine, final Map<String, Integer> dict ) {
-            super(headerLine, dict, BCF2Type.CHAR);
+        /*
+        Cache the result of encoding values as this can be expensive, and in general
+        we will need to do it twice, once to determine the maximum length of all the
+        string representations of the objects, and once to write them out
+         */
+        private final Map<Object, byte[]> encodedCache = new HashMap<>();
+
+        public StringOrCharacter(final VCFCompoundHeaderLine headerLine, final Map<String, Integer> dict, final BCF2Encoder encoder) {
+            super(headerLine, dict, BCF2Type.CHAR, encoder);
         }
 
         @Override
-        public void encodeValue(final BCF2Encoder encoder, final Object value, final BCF2Type type, final int minValues) throws IOException {
-            final String s = javaStringToBCF2String(value);
-            encoder.encodeRawString(s, Math.max(s.length(), minValues));
+        public void encodeValue(final Object value, final BCF2Type type, final int minValues) throws IOException {
+            final byte[] bytes = encodedCache.computeIfAbsent(value, this::javaStringToBCF2String);
+            encoder.encodeRawString(bytes, minValues);
         }
 
         //
@@ -275,11 +306,24 @@ public abstract class BCF2FieldEncoder {
         // as arrays of CHAR type, which has a variable number of elements depending on the
         // exact string being encoded
         //
-        @Override public boolean hasConstantNumElements()          { return false; }
-        @Override public boolean hasContextDeterminedNumElements() { return false; }
-        @Override public boolean hasValueDeterminedNumElements()   { return true; }
-        @Override protected int numElementsFromValue(final Object value) {
-            return value == null ? 0 : javaStringToBCF2String(value).length();
+        @Override
+        public boolean hasConstantNumElements() {
+            return false;
+        }
+
+        @Override
+        public boolean hasContextDeterminedNumElements() {
+            return false;
+        }
+
+        @Override
+        public boolean hasValueDeterminedNumElements() {
+            return true;
+        }
+
+        @Override
+        protected int numElementsFromValue(final Object value) {
+            return encodedCache.computeIfAbsent(value, this::javaStringToBCF2String).length;
         }
 
         /**
@@ -287,20 +331,18 @@ public abstract class BCF2FieldEncoder {
          * BCF2 string if the value is a list.
          *
          * @param value a String or List<String> to encode, or null
-         * @return a non-null string to encode
+         * @return a byte array to encode
          */
-        private String javaStringToBCF2String(final Object value) {
-            if ( value == null )
-                return "";
+        @SuppressWarnings("unckecked")
+        private byte[] javaStringToBCF2String(final Object value) {
+            if (value == null)
+                return new byte[0];
             else if (value instanceof List) {
-                final List<String> l = (List<String>)value;
-                return BCF2Utils.collapseStringList(l);
-            } else if ( value.getClass().isArray() ) {
-                final List<String> l = new ArrayList<String>();
-                Collections.addAll(l, (String[])value);
-                return BCF2Utils.collapseStringList(l);
+                return encoder.compactStrings((List<String>) value);
+            } else if (value.getClass().isArray()) {
+                return encoder.compactStrings((String[]) value);
             } else
-                return (String)value;
+                return value.toString().getBytes(StandardCharsets.UTF_8);
         }
     }
 
@@ -311,9 +353,9 @@ public abstract class BCF2FieldEncoder {
     // ----------------------------------------------------------------------
 
     public static class Flag extends BCF2FieldEncoder {
-        public Flag(final VCFCompoundHeaderLine headerLine, final Map<String, Integer> dict ) {
-            super(headerLine, dict, BCF2Type.INT8);
-            if ( ! headerLine.isFixedCount() || headerLine.getCount() != 0 )
+        public Flag(final VCFCompoundHeaderLine headerLine, final Map<String, Integer> dict, final BCF2Encoder encoder) {
+            super(headerLine, dict, BCF2Type.INT8, encoder);
+            if (!headerLine.isFixedCount() || headerLine.getCount() != 0)
                 throw new IllegalStateException("Flag encoder only supports atomic flags for field " + getField());
         }
 
@@ -323,7 +365,7 @@ public abstract class BCF2FieldEncoder {
         }
 
         @Override
-        public void encodeValue(final BCF2Encoder encoder, final Object value, final BCF2Type type, final int minValues) throws IOException {
+        public void encodeValue(final Object value, final BCF2Type type, final int minValues) throws IOException {
             encoder.encodeRawBytes(1, getStaticType());
         }
     }
@@ -337,32 +379,32 @@ public abstract class BCF2FieldEncoder {
     public static class Float extends BCF2FieldEncoder {
         final boolean isAtomic;
 
-        public Float(final VCFCompoundHeaderLine headerLine, final Map<String, Integer> dict ) {
-            super(headerLine, dict, BCF2Type.FLOAT);
+        public Float(final VCFCompoundHeaderLine headerLine, final Map<String, Integer> dict, final BCF2Encoder encoder) {
+            super(headerLine, dict, BCF2Type.FLOAT, encoder);
             isAtomic = hasConstantNumElements() && numElements() == 1;
         }
 
         @Override
-        public void encodeValue(final BCF2Encoder encoder, final Object value, final BCF2Type type, final int minValues) throws IOException {
+        public void encodeValue(final Object value, final BCF2Type type, final int minValues) throws IOException {
             int count = 0;
             // TODO -- can be restructured to avoid toList operation
-            if ( isAtomic ) {
+            if (isAtomic) {
                 // fast path for fields with 1 fixed float value
-                if ( value != null ) {
-                    encoder.encodeRawFloat((Double)value);
+                if (value != null) {
+                    encoder.encodeRawFloat((Double) value);
                     count++;
                 }
             } else {
                 // handle generic case
                 final List<Double> doubles = BCF2Utils.toList(Double.class, value);
-                for ( final Double d : doubles ) {
-                    if ( d != null ) { // necessary because .,. => [null, null] in VC
+                for (final Double d : doubles) {
+                    if (d != null) { // necessary because .,. => [null, null] in VC
                         encoder.encodeRawFloat(d);
                         count++;
                     }
                 }
             }
-            for ( ; count < minValues; count++ ) encoder.encodeRawMissingValue(type);
+            for (; count < minValues; count++) encoder.encodeRawMissingValue(type);
         }
     }
 
@@ -373,30 +415,30 @@ public abstract class BCF2FieldEncoder {
     // ----------------------------------------------------------------------
 
     public static class IntArray extends BCF2FieldEncoder {
-        public IntArray(final VCFCompoundHeaderLine headerLine, final Map<String, Integer> dict ) {
-            super(headerLine, dict, null);
+        public IntArray(final VCFCompoundHeaderLine headerLine, final Map<String, Integer> dict, final BCF2Encoder encoder) {
+            super(headerLine, dict, null, encoder);
         }
 
         @Override
         protected int numElementsFromValue(final Object value) {
-            return value == null ? 0 : ((int[])value).length;
+            return value == null ? 0 : ((int[]) value).length;
         }
 
         @Override
         public BCF2Type getDynamicType(final Object value) {
-            return value == null ? BCF2Type.INT8 : BCF2Utils.determineIntegerType((int[])value);
+            return value == null ? BCF2Type.INT8 : BCF2Utils.determineIntegerType((int[]) value);
         }
 
         @Override
-        public void encodeValue(final BCF2Encoder encoder, final Object value, final BCF2Type type, final int minValues) throws IOException {
+        public void encodeValue(final Object value, final BCF2Type type, final int minValues) throws IOException {
             int count = 0;
-            if ( value != null ) {
-                for ( final int i : (int[])value ) {
+            if (value != null) {
+                for (final int i : (int[]) value) {
                     encoder.encodeRawInt(i, type);
                     count++;
                 }
             }
-            for ( ; count < minValues; count++ ) encoder.encodeRawMissingValue(type);
+            for (; count < minValues; count++) encoder.encodePaddingValue(type);
         }
     }
 
@@ -410,29 +452,28 @@ public abstract class BCF2FieldEncoder {
      * Specialized int encoder for atomic (non-list) integers
      */
     public static class AtomicInt extends BCF2FieldEncoder {
-        public AtomicInt(final VCFCompoundHeaderLine headerLine, final Map<String, Integer> dict ) {
-            super(headerLine, dict, null);
+        public AtomicInt(final VCFCompoundHeaderLine headerLine, final Map<String, Integer> dict, final BCF2Encoder encoder) {
+            super(headerLine, dict, null, encoder);
         }
 
         @Override
         public BCF2Type getDynamicType(final Object value) {
-            return value == null ? BCF2Type.INT8 : BCF2Utils.determineIntegerType((Integer)value);
+            return value == null ? BCF2Type.INT8 : BCF2Utils.determineIntegerType((Integer) value);
         }
 
         @Override
-        public void encodeValue(final BCF2Encoder encoder, final Object value, final BCF2Type type, final int minValues) throws IOException {
-            int count = 0;
-            if ( value != null ) {
-                encoder.encodeRawInt((Integer)value, type);
-                count++;
+        public void encodeValue(final Object value, final BCF2Type type, final int minValues) throws IOException {
+            if (value == null) {
+                encoder.encodeRawMissingValue(type);
+            } else {
+                encoder.encodeRawInt((Integer) value, type);
             }
-            for ( ; count < minValues; count++ ) encoder.encodeRawMissingValue(type);
         }
     }
 
     public static class GenericInts extends BCF2FieldEncoder {
-        public GenericInts(final VCFCompoundHeaderLine headerLine, final Map<String, Integer> dict ) {
-            super(headerLine, dict, null);
+        public GenericInts(final VCFCompoundHeaderLine headerLine, final Map<String, Integer> dict, final BCF2Encoder encoder) {
+            super(headerLine, dict, null, encoder);
         }
 
         @Override
@@ -441,15 +482,15 @@ public abstract class BCF2FieldEncoder {
         }
 
         @Override
-        public void encodeValue(final BCF2Encoder encoder, final Object value, final BCF2Type type, final int minValues) throws IOException {
+        public void encodeValue(final Object value, final BCF2Type type, final int minValues) throws IOException {
             int count = 0;
-            for ( final Integer i : BCF2Utils.toList(Integer.class, value) ) {
-                if ( i != null ) { // necessary because .,. => [null, null] in VC
+            for (final Integer i : BCF2Utils.toList(Integer.class, value)) {
+                if (i != null) { // necessary because .,. => [null, null] in VC
                     encoder.encodeRawInt(i, type);
                     count++;
                 }
             }
-            for ( ; count < minValues; count++ ) encoder.encodeRawMissingValue(type);
+            for (; count < minValues; count++) encoder.encodeRawMissingValue(type);
         }
     }
 }

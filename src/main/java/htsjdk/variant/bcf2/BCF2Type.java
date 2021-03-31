@@ -1,27 +1,27 @@
 /*
-* Copyright (c) 2012 The Broad Institute
-* 
-* Permission is hereby granted, free of charge, to any person
-* obtaining a copy of this software and associated documentation
-* files (the "Software"), to deal in the Software without
-* restriction, including without limitation the rights to use,
-* copy, modify, merge, publish, distribute, sublicense, and/or sell
-* copies of the Software, and to permit persons to whom the
-* Software is furnished to do so, subject to the following
-* conditions:
-* 
-* The above copyright notice and this permission notice shall be
-* included in all copies or substantial portions of the Software.
-* 
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-* EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
-* OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-* NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-* HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-* WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
-* THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
+ * Copyright (c) 2012 The Broad Institute
+ *
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation
+ * files (the "Software"), to deal in the Software without
+ * restriction, including without limitation the rights to use,
+ * copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following
+ * conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
+ * THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
 
 package htsjdk.variant.bcf2;
 
@@ -39,15 +39,18 @@ import java.util.EnumSet;
 public enum BCF2Type {
     // the actual values themselves
     MISSING(0, 0, 0x00) {
-        @Override public int read(final InputStream in) throws IOException {
+        @Override
+        public int read(final InputStream in) throws IOException {
             throw new IllegalArgumentException("Cannot read MISSING type");
         }
-        @Override public void write(final int value, final OutputStream out) throws IOException {
+
+        @Override
+        public void write(final int value, final OutputStream out) throws IOException {
             throw new IllegalArgumentException("Cannot write MISSING type");
         }
     },
 
-    INT8 (1, 1, 0xFFFFFF80,        -127,        127) {
+    INT8(1, 1, 0xFFFFFF80, 0xFFFFFF81, -127, 127) {
         @Override
         public int read(final InputStream in) throws IOException {
             return BCF2Utils.readByte(in);
@@ -59,12 +62,12 @@ public enum BCF2Type {
         }
     },
 
-    INT16(2, 2, 0xFFFF8000,      -32767,      32767) {
+    INT16(2, 2, 0xFFFF8000, 0xFFFF8001, -32767, 32767) {
         @Override
         public int read(final InputStream in) throws IOException {
             final int b2 = BCF2Utils.readByte(in) & 0xFF;
             final int b1 = BCF2Utils.readByte(in) & 0xFF;
-            return (short)((b1 << 8) | b2);
+            return (short) ((b1 << 8) | b2);
         }
 
         @Override
@@ -75,14 +78,14 @@ public enum BCF2Type {
         }
     },
 
-    INT32(3, 4, 0x80000000, -2147483647, 2147483647) {
+    INT32(3, 4, 0x80000000, 0x80000001, -2147483647, 2147483647) {
         @Override
         public int read(final InputStream in) throws IOException {
             final int b4 = BCF2Utils.readByte(in) & 0xFF;
             final int b3 = BCF2Utils.readByte(in) & 0xFF;
             final int b2 = BCF2Utils.readByte(in) & 0xFF;
             final int b1 = BCF2Utils.readByte(in) & 0xFF;
-            return (int)(b1 << 24 | b2 << 16 | b3 << 8 | b4);
+            return b1 << 24 | b2 << 16 | b3 << 8 | b4;
         }
 
         @Override
@@ -106,7 +109,7 @@ public enum BCF2Type {
         }
     },
 
-    CHAR (7, 1, 0x00000000) {
+    CHAR(7, 1, 0x00000000) {
         @Override
         public int read(final InputStream in) throws IOException {
             return INT8.read(in);
@@ -120,25 +123,39 @@ public enum BCF2Type {
 
     private final int id;
     private final Object missingJavaValue;
+
+    /*
+    Note that the values for these fields for INT8 and IN16 differ from those given in the spec
+    The values given here are as if they have been sign-extended to 32 bits from their native
+    integer width (meaning they have all bits above that width set, as the missing and EOV
+    values all have their highest bit set in their native width)
+
+    This is so that that they compare equal to the values returned by the various
+    integer types' read methods, which must also sign-extend their return values so
+    we can return a uniformly sized 32-bit int
+     */
     private final int missingBytes;
+    private final int EOVBytes;
     private final int sizeInBytes;
     private final long minValue, maxValue;
 
     BCF2Type(final int id, final int sizeInBytes, final int missingBytes) {
-        this(id, sizeInBytes, missingBytes, 0, 0);
+        this(id, sizeInBytes, missingBytes, 0, 0, 0);
     }
 
-    BCF2Type(final int id, final int sizeInBytes, final int missingBytes, final long minValue, final long maxValue) {
+    BCF2Type(final int id, final int sizeInBytes, final int missingBytes, final int EOVBytes, final long minValue, final long maxValue) {
         this.id = id;
         this.sizeInBytes = sizeInBytes;
         this.missingJavaValue = null;
         this.missingBytes = missingBytes;
+        this.EOVBytes = EOVBytes;
         this.minValue = minValue;
         this.maxValue = maxValue;
     }
 
     /**
      * How many bytes are used to represent this type on disk?
+     *
      * @return
      */
     public int getSizeInBytes() {
@@ -147,19 +164,24 @@ public enum BCF2Type {
 
     /**
      * The ID according to the BCF2 specification
+     *
      * @return
      */
-    public int getID() { return id; }
+    public int getID() {
+        return id;
+    }
 
     /**
      * Can we encode value v in this type, according to its declared range.
-     *
+     * <p>
      * Only makes sense for integer values
      *
      * @param v
      * @return
      */
-    public final boolean withinRange(final long v) { return v >= minValue && v <= maxValue; }
+    public final boolean withinRange(final long v) {
+        return v >= minValue && v <= maxValue;
+    }
 
     /**
      * Return the java object (aka null) that is used to represent a missing value for this
@@ -167,7 +189,9 @@ public enum BCF2Type {
      *
      * @return
      */
-    public Object getMissingJavaValue() { return missingJavaValue; }
+    public Object getMissingJavaValue() {
+        return missingJavaValue;
+    }
 
     /**
      * The bytes (encoded as an int) that are used to represent a missing value
@@ -175,7 +199,19 @@ public enum BCF2Type {
      *
      * @return
      */
-    public int getMissingBytes() { return missingBytes; }
+    public int getMissingBytes() {
+        return missingBytes;
+    }
+
+    /**
+     * The bytes (encoded as an int) that are used to represent an end of vector value
+     * for this type in BCF2
+     *
+     * @return
+     */
+    public int getEOVBytes() {
+        return EOVBytes;
+    }
 
     /**
      * An enum set of the types that might represent Integer values
@@ -195,7 +231,7 @@ public enum BCF2Type {
 
     /**
      * Read a value from in stream of this BCF2 type as an int [32 bit] collection of bits
-     *
+     * <p>
      * For intX and char values this is just the int / byte value of the underlying data represented as a 32 bit int
      * For a char the result must be converted to a char by (char)(byte)(0x0F &amp; value)
      * For doubles it's necessary to convert subsequently this value to a double via Double.bitsToDouble()

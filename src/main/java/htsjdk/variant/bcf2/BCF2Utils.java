@@ -168,7 +168,7 @@ public final class BCF2Utils {
     }
 
     public static boolean isCollapsedString(final String s) {
-        return !s.isEmpty() && s.charAt(0) == ',';
+        return !s.isEmpty() && s.contains(",");
     }
 
     /**
@@ -251,7 +251,8 @@ public final class BCF2Utils {
 
     public static BCF2Type determineIntegerType(final List<Integer> values) {
         BCF2Type maxType = BCF2Type.INT8;
-        for ( final int value : values ) {
+        for ( final Integer value : values ) {
+            if (value == null) continue;
             final BCF2Type type1 = determineIntegerType(value);
             switch ( type1 ) {
                 case INT8: break;

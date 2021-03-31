@@ -1,6 +1,6 @@
 /*
 * Copyright (c) 2012 The Broad Institute
-* 
+*
 * Permission is hereby granted, free of charge, to any person
 * obtaining a copy of this software and associated documentation
 * files (the "Software"), to deal in the Software without
@@ -9,10 +9,10 @@
 * copies of the Software, and to permit persons to whom the
 * Software is furnished to do so, subject to the following
 * conditions:
-* 
+*
 * The above copyright notice and this permission notice shall be
 * included in all copies or substantial portions of the Software.
-* 
+*
 * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
 * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
@@ -99,7 +99,7 @@ public abstract class BCF2FieldWriter {
             } else {
                 final int valueCount = getFieldEncoder().numElements(vc, rawValue);
                 encoder.encodeType(valueCount, type);
-                getFieldEncoder().encodeValue(encoder, rawValue, type, valueCount);
+                getFieldEncoder().encodeValue(rawValue, type, valueCount);
             }
         }
     }
@@ -142,7 +142,7 @@ public abstract class BCF2FieldWriter {
 
         public void addGenotype(final BCF2Encoder encoder, final VariantContext vc, final Genotype g) throws IOException {
             final Object fieldValue = g.getExtendedAttribute(getField(), null);
-            getFieldEncoder().encodeValue(encoder, fieldValue, encodingType, nValuesPerGenotype);
+            getFieldEncoder().encodeValue(fieldValue, encodingType, nValuesPerGenotype);
         }
 
         protected int numElements(final VariantContext vc, final Genotype g) {
@@ -217,7 +217,7 @@ public abstract class BCF2FieldWriter {
 
         @Override
         public void addGenotype(final BCF2Encoder encoder, final VariantContext vc, final Genotype g) throws IOException {
-            getFieldEncoder().encodeValue(encoder, ige.getValues(g), encodingType, nValuesPerGenotype);
+            getFieldEncoder().encodeValue(ige.getValues(g), encodingType, nValuesPerGenotype);
         }
 
         @Override
@@ -234,7 +234,7 @@ public abstract class BCF2FieldWriter {
         @Override
         public void addGenotype(final BCF2Encoder encoder, final VariantContext vc, final Genotype g) throws IOException {
             final String fieldValue = g.getFilters();
-            getFieldEncoder().encodeValue(encoder, fieldValue, encodingType, nValuesPerGenotype);
+            getFieldEncoder().encodeValue(fieldValue, encodingType, nValuesPerGenotype);
         }
 
         @Override
@@ -274,10 +274,10 @@ public abstract class BCF2FieldWriter {
                     final Allele a = g.getAllele(i);
                     final int offset = getAlleleOffset(a);
                     final int encoded = ((offset+1) << 1) | ((g.isPhased() && i!=0) ? 0x01 : 0x00);
-                    encoder.encodeRawBytes(encoded, encodingType);
+                    encoder.encodeRawInt(encoded, encodingType);
                 } else {
-                    // we need to pad with missing as we have ploidy < max for this sample
-                    encoder.encodeRawBytes(encodingType.getMissingBytes(), encodingType);
+                    // we need to pad as we have ploidy < max for this sample
+                    encoder.encodePaddingValue(encodingType);
                 }
             }
         }
@@ -305,7 +305,8 @@ public abstract class BCF2FieldWriter {
         }
 
         private final void buildAlleleMap(final VariantContext vc) {
-            // these are fast path options to determine the offsets for
+            // ref and alt1 are handled by a fast path when determining the offset
+            // so they do not need to be placed in the map
             final int nAlleles = vc.getNAlleles();
             ref = vc.getReference();
             alt1 = nAlleles > 1 ? vc.getAlternateAllele(0) : null;

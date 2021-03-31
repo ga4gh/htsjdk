@@ -25,11 +25,13 @@
 
 package htsjdk.variant.variantcontext.writer;
 
+import htsjdk.tribble.TribbleException;
 import htsjdk.variant.utils.GeneralUtils;
 import htsjdk.variant.vcf.VCFCompoundHeaderLine;
 import htsjdk.variant.vcf.VCFConstants;
 import htsjdk.variant.vcf.VCFFormatHeaderLine;
 import htsjdk.variant.vcf.VCFHeader;
+import htsjdk.variant.vcf.VCFHeaderLineCount;
 import htsjdk.variant.vcf.VCFHeaderLineType;
 import htsjdk.variant.vcf.VCFInfoHeaderLine;
 
@@ -72,7 +74,7 @@ public class BCF2FieldWriterManager {
         }
     }
 
-    private final <T> void add(final Map<String, T> map, final String field, final T writer) {
+    private <T> void add(final Map<String, T> map, final String field, final T writer) {
         if ( map.containsKey(field) )
             throw new IllegalStateException("BUG: field " + field + " already seen in VCFHeader while building BCF2 field encoders");
         map.put(field, writer);
@@ -92,6 +94,7 @@ public class BCF2FieldWriterManager {
         return new BCF2FieldWriter.GenericSiteWriter(header, createFieldEncoder(line, encoder, dict, false));
     }
 
+
     private BCF2FieldEncoder createFieldEncoder(final VCFCompoundHeaderLine line,
                                                 final BCF2Encoder encoder,
                                                 final Map<String, Integer> dict,
@@ -100,23 +103,23 @@ public class BCF2FieldWriterManager {
         if ( createGenotypesEncoders && intGenotypeFieldAccessors.getAccessor(line.getID()) != null ) {
             if ( GeneralUtils.DEBUG_MODE_ENABLED && line.getType() != VCFHeaderLineType.Integer )
                 System.err.println("Warning: field " + line.getID() + " expected to encode an integer but saw " + line.getType() + " for record " + line);
-            return new BCF2FieldEncoder.IntArray(line, dict);
+            return new BCF2FieldEncoder.IntArray(line, dict, encoder);
         } else if ( createGenotypesEncoders && line.getID().equals(VCFConstants.GENOTYPE_KEY) ) {
-            return new BCF2FieldEncoder.GenericInts(line, dict);
+            return new BCF2FieldEncoder.GenericInts(line, dict, encoder);
         } else {
             switch ( line.getType() ) {
                 case Character:
                 case String:
-                    return new BCF2FieldEncoder.StringOrCharacter(line, dict);
+                    return new BCF2FieldEncoder.StringOrCharacter(line, dict, encoder);
                 case Flag:
-                    return new BCF2FieldEncoder.Flag(line, dict);
+                    return new BCF2FieldEncoder.Flag(line, dict, encoder);
                 case Float:
-                    return new BCF2FieldEncoder.Float(line, dict);
+                    return new BCF2FieldEncoder.Float(line, dict, encoder);
                 case Integer:
                     if ( line.isFixedCount() && line.getCount() == 1 )
-                        return new BCF2FieldEncoder.AtomicInt(line, dict);
+                        return new BCF2FieldEncoder.AtomicInt(line, dict, encoder);
                     else
-                        return new BCF2FieldEncoder.GenericInts(line, dict);
+                        return new BCF2FieldEncoder.GenericInts(line, dict, encoder);
                 default:
                     throw new IllegalArgumentException("Unexpected type for field " + line.getID());
             }

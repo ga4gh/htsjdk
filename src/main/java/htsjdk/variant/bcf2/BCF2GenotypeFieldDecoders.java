@@ -141,11 +141,11 @@ public class BCF2GenotypeFieldDecoders {
                 final int a1 = decoder.decodeInt(type);
                 final int a2 = decoder.decodeInt(type);
 
-                if ( a1 == type.getMissingBytes() ) {
-                    assert a2 == type.getMissingBytes();
+                if ( a1 == decoder.getPaddingValue(type) ) {
+                    assert a2 == decoder.getPaddingValue(type);
                     // no called sample GT = .
                     gb.alleles(null);
-                } else if ( a2 == type.getMissingBytes() ) {
+                } else if ( a2 == decoder.getPaddingValue(type) ) {
                     gb.alleles(Arrays.asList(getAlleleFromEncoded(siteAlleles, a1)));
                 } else {
                     // downshift to remove phase
@@ -188,7 +188,7 @@ public class BCF2GenotypeFieldDecoders {
                     assert encoded.length > 0;
 
                     // we have at least some alleles to decode
-                    final List<Allele> gt = new ArrayList<Allele>(encoded.length);
+                    final List<Allele> gt = new ArrayList<>(encoded.length);
 
                     // note that the auto-pruning of fields magically handles different
                     // ploidy per sample at a site
@@ -196,6 +196,8 @@ public class BCF2GenotypeFieldDecoders {
                         gt.add(getAlleleFromEncoded(siteAlleles, encode));
 
                     gb.alleles(gt);
+                    // TODO htsjdk's Genotype class cannot properly encode phasing for ploidy > 2
+                    // See https://github.com/samtools/htsjdk/issues/1044
                     final boolean phased = ((encoded.length > 1 ? encoded[1] : encoded[0]) & 0x01) == 1;
                     gb.phased(phased);
                 }
@@ -251,16 +253,15 @@ public class BCF2GenotypeFieldDecoders {
         public void decode(final List<Allele> siteAlleles, final String field, final BCF2Decoder decoder, final byte typeDescriptor, final int numElements, final GenotypeBuilder[] gbs) throws IOException {
             for ( final GenotypeBuilder gb : gbs ) {
                 Object value = decoder.decodeTypedValue(typeDescriptor, numElements);
-                if ( value != null ) { // don't add missing values
-                    if ( value instanceof List && ((List)value).size() == 1) {
-                        // todo -- I really hate this, and it suggests that the code isn't completely right
-                        // the reason it's here is that it's possible to prune down a vector to a singleton
-                        // value and there we have the contract that the value comes back as an atomic value
-                        // not a vector of size 1
-                        value = ((List)value).get(0);
-                    }
-                    gb.attribute(field, value);
+                if (value == null) gb.attribute(field, null);
+                if ( value instanceof List && ((List)value).size() == 1) {
+                    // todo -- I really hate this, and it suggests that the code isn't completely right
+                    // the reason it's here is that it's possible to prune down a vector to a singleton
+                    // value and there we have the contract that the value comes back as an atomic value
+                    // not a vector of size 1
+                    value = ((List)value).get(0);
                 }
+                gb.attribute(field, value);
             }
         }
     }
@@ -269,9 +270,8 @@ public class BCF2GenotypeFieldDecoders {
         @Override
         public void decode(final List<Allele> siteAlleles, final String field, final BCF2Decoder decoder, final byte typeDescriptor, final int numElements, final GenotypeBuilder[] gbs) throws IOException {
             for ( final GenotypeBuilder gb : gbs ) {
-                Object value = decoder.decodeTypedValue(typeDescriptor, numElements);
-                assert value == null || value instanceof String;
-                gb.filter((String)value);
+                final String value = decoder.decodeUnexplodedString(numElements);
+                gb.filter(value);
             }
         }
     }
