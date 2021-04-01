@@ -42,7 +42,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 
 
 public class BCF2EncoderDecoderUnitTest extends VariantBaseTest {
@@ -227,15 +226,6 @@ public class BCF2EncoderDecoderUnitTest extends VariantBaseTest {
         );
     }
 
-    @Test(dataProvider = "BCF2EncodingTestProviderBasicTypes")
-    public void testBCF2BasicTypesWithObjectNoType(final List<BCF2TypedValue> toEncode, final BCFVersion version) throws IOException {
-        testBCF2BasicTypesWithEncodeMe(
-            toEncode,
-            (encoder, tv) -> encoder.encode(tv.value),
-            version
-        );
-    }
-
     public void testBCF2BasicTypesWithEncodeMe(final List<BCF2TypedValue> toEncode, final EncodeMe func, final BCFVersion version) throws IOException {
         for (final BCF2TypedValue tv : toEncode) {
             final BCF2Encoder encoder = BCF2Encoder.getEncoder(version);
@@ -337,20 +327,58 @@ public class BCF2EncoderDecoderUnitTest extends VariantBaseTest {
     //
     // -----------------------------------------------------------------
 
-    @DataProvider(name = "ListOfStrings")
-    public Object[][] listOfStringsProvider() {
+    @DataProvider(name = "Strings")
+    public Object[][] stringsProvider() {
         final List<Object[]> tests = new ArrayList<>();
-        tests.add(new Object[]{Arrays.asList("s1", "s2"), ",s1,s2"});
-        tests.add(new Object[]{Arrays.asList("s1", "s2", "s3"), ",s1,s2,s3"});
-        tests.add(new Object[]{Arrays.asList("s1", "s2", "s3", "s4"), ",s1,s2,s3,s4"});
+        for (final BCFVersion version : BCFVersion.SUPPORTED_VERSIONS) {
+            tests.add(new Object[]{"", version});
+            tests.add(new Object[]{" ", version});
+            tests.add(new Object[]{"s", version});
+            tests.add(new Object[]{"sss", version});
+        }
+        return tests.toArray(new Object[][]{});
+    }
+
+    @Test(dataProvider = "Strings")
+    public void testEncodingOfListOfString(final String s, final BCFVersion version) throws IOException {
+        final BCF2Encoder encoder = BCF2Encoder.getEncoder(version);
+        encoder.encodeTypedString(s);
+
+        final BCF2Decoder decoder = BCF2Decoder.getDecoder(version, encoder.getRecordBytes());
+        final String decoded = decoder.decodeUnexplodedString();
+
+        Assert.assertEquals(s, decoded);
+    }
+
+    @DataProvider(name = "ListOfStrings")
+    public Object[][] listofStringsProvider() {
+        final List<Object[]> tests = new ArrayList<>();
+        for (final BCFVersion version : BCFVersion.SUPPORTED_VERSIONS) {
+            for (final int padding : Arrays.asList(0, 1, 5)) {
+                tests.add(new Object[]{Collections.emptyList(), padding, version});
+                tests.add(new Object[]{Collections.singletonList("s"), padding, version});
+                tests.add(new Object[]{Arrays.asList("s", ""), padding, version});
+                tests.add(new Object[]{Arrays.asList("s", "ss", "sss"), padding, version});
+            }
+        }
         return tests.toArray(new Object[][]{});
     }
 
     @Test(dataProvider = "ListOfStrings")
-    public void testEncodingListOfString(final List<String> strings, final String expected) {
-        final String collapsed = BCF2Utils.collapseStringList(strings);
-        Assert.assertEquals(collapsed, expected);
-        Assert.assertEquals(BCF2Utils.explodeStringList(collapsed), strings);
+    public void testEncodingOfListOfString(final List<String> strings, final int padding, final BCFVersion version) {
+        final BCF2Encoder encoder = BCF2Encoder.getEncoder(version);
+        final byte[] bytes = encoder.compactStrings(strings);
+        final int paddedSize = bytes.length + padding;
+        encoder.encodeRawString(bytes, paddedSize);
+
+        final BCF2Decoder decoder = BCF2Decoder.getDecoder(version, encoder.getRecordBytes());
+        final List<String> decodedStrings = decoder.decodeExplodedStrings(paddedSize);
+
+        // Padding values not included
+        Assert.assertEquals(strings, decodedStrings);
+
+        // The decoder should have drained all the remaining padding values from the stream
+        Assert.assertTrue(decoder.blockIsFullyDecoded());
     }
 
     // -----------------------------------------------------------------
@@ -449,34 +477,33 @@ public class BCF2EncoderDecoderUnitTest extends VariantBaseTest {
     //
     // Test encoding / decoding arrays of ints
     //
-    // This checks that we can encode and decode correctly with the
-    // low-level decodeIntArray function arrays of values.  This
-    // has to be pretty comprehensive as decodeIntArray is a highly optimized
+    // This checks that we can correctly encode and decode int[] with
+    // the low-level decodeIntArray function arrays. This has to be
+    // pretty comprehensive as decodeIntArray is a highly optimized
     // piece of code with lots of edge cases.  The values we are encoding
     // don't really matter -- just that the values come back as expected.
     //
+    // decodeIntArray is only meant to decode arrays that are guaranteed
+    // to not have internal missing values, but may be missing (or EOV)
+    // padded, so we are interested in whether the encoder correctly
+    // truncates padded arrays while draining the stream.
     // -----------------------------------------------------------------
 
-    @DataProvider(name = "IntArrays")
-    public Object[][] makeIntArrays() {
+    @DataProvider(name = "BCF2_2IntArrays")
+    public Object[][] IntArrays() {
         final List<Object[]> tests = new ArrayList<>();
-
         for (final BCFVersion version : BCFVersion.SUPPORTED_VERSIONS) {
             for (final int nValues : Arrays.asList(0, 1, 2, 5, 10, 100)) {
                 for (final int nPad : Arrays.asList(0, 1, 2, 5, 10, 100)) {
                     final int nElements = nValues + nPad;
 
-                    final List<Integer> values = new ArrayList<>(nElements);
+                    final int[] vs = new int[nValues];
 
                     // add nValues from 0 to nValues - 1
                     for (int i = 0; i < nValues; i++)
-                        values.add(i);
+                        vs[i] = i;
 
-                    // add nPad nulls
-                    for (int i = 0; i < nPad; i++)
-                        values.add(null);
-
-                    tests.add(new Object[]{values, version});
+                    tests.add(new Object[]{vs, nElements, version});
                 }
             }
         }
@@ -484,37 +511,26 @@ public class BCF2EncoderDecoderUnitTest extends VariantBaseTest {
         return tests.toArray(new Object[][]{});
     }
 
-    @Test(dataProvider = "IntArrays")
-    public void testIntArrays(final List<Integer> ints, final BCFVersion version) throws IOException {
+    @Test(dataProvider = "BCF2_2IntArrays")
+    public void testBCF2_2IntArrays(final int[] ints, final int paddedSize, final BCFVersion version) throws IOException {
         final BCF2Encoder encoder = BCF2Encoder.getEncoder(version);
-        encoder.encodeTyped(ints, BCF2Type.INT16);
+        encoder.encodeTypedVecInt(ints, paddedSize);
 
         final BCF2Decoder decoder = BCF2Decoder.getDecoder(version, encoder.getRecordBytes());
 
-        final byte typeDescriptor = decoder.readTypeDescriptor();
-
         // read the int[] with the low-level version
+        final byte typeDescriptor = decoder.readTypeDescriptor();
         final int size = decoder.decodeNumberOfElements(typeDescriptor);
         final int[] decoded = decoder.decodeIntArray(typeDescriptor, size);
 
-        if (isMissing(ints)) {
-            // we expect that the result is null in this case
-            Assert.assertNull(decoded, "Encoded all missing values -- expected null");
+        if (ints.length == 0) {
+            Assert.assertNull(decoded);
         } else {
-            // we expect at least some values to come back
-            Assert.assertTrue(decoded.length > 0, "Must have at least 1 element for non-null encoded data");
+            // Padding values not included
+            Assert.assertEquals(ints.length, decoded.length);
 
-            // check corresponding values
-            for (int i = 0; i < ints.size(); i++) {
-                final Integer expected = ints.get(i);
-
-                if (expected == null) {
-                    Assert.assertTrue(decoded.length <= i, "we expect decoded to be truncated for missing values");
-                } else {
-                    Assert.assertTrue(decoded.length > i, "we expected at least " + i + " values in decoded array");
-                    Assert.assertEquals(decoded[i], (int) expected);
-                }
-            }
+            // The decoder should have drained all the remaining padding values from the stream
+            Assert.assertTrue(decoder.blockIsFullyDecoded());
         }
     }
 
@@ -534,13 +550,7 @@ public class BCF2EncoderDecoderUnitTest extends VariantBaseTest {
     private byte[] encodeRecord(final List<BCF2TypedValue> toEncode, final BCFVersion version) throws IOException {
         final BCF2Encoder encoder = BCF2Encoder.getEncoder(version);
         for (final BCF2TypedValue tv : toEncode) {
-            if (tv.isMissing())
-                encoder.encodeTypedMissing(tv.type);
-            else {
-                final BCF2Type encodedType = encoder.encode(tv.value);
-                if (tv.type != null) // only if we have an expectation
-                    Assert.assertEquals(encodedType, tv.type);
-            }
+            encoder.encodeTyped(tv.value, tv.type);
         }
 
         // check output
@@ -577,9 +587,5 @@ public class BCF2EncoderDecoderUnitTest extends VariantBaseTest {
             VariantBaseTest.assertEqualsDoubleSmart(decodedFloat, valueFloat, FLOAT_TOLERANCE);
         } else
             Assert.assertEquals(decoded, tv.value);
-    }
-
-    private boolean isMissing(final List<Integer> values) {
-        return values == null || values.stream().allMatch(Objects::isNull);
     }
 }

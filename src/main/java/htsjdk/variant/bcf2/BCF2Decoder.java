@@ -33,6 +33,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 public abstract class BCF2Decoder {
@@ -55,17 +56,7 @@ public abstract class BCF2Decoder {
     }
 
     public static BCF2Decoder getDecoder(final BCFVersion version, final byte[] recordBytes) {
-        final BCF2Decoder decoder;
-        switch (version.getMinorVersion()) {
-            case 1:
-                decoder = new BCF2Decoder.BCF2_1Decoder();
-                break;
-            case 2:
-                decoder = new BCF2Decoder.BCF2_2Decoder();
-                break;
-            default:
-                throw new TribbleException("BCF2Codec can only process BCF2 files with minor version <= " + BCF2Codec.ALLOWED_MINOR_VERSION + " but this file has minor version " + version.getMinorVersion());
-        }
+        final BCF2Decoder decoder = BCF2Decoder.getDecoder(version);
         decoder.setRecordBytes(recordBytes);
         return decoder;
     }
@@ -173,7 +164,6 @@ public abstract class BCF2Decoder {
     }
 
     public final Object decodeSingleValue(final BCF2Type type) throws IOException {
-        // TODO -- decodeTypedValue should integrate this routine
         final int value = decodeInt(type);
 
         if (value == type.getMissingBytes())
@@ -199,100 +189,6 @@ public abstract class BCF2Decoder {
     // Decode raw primitive data types (ints, floats, and strings)
     //
     // ----------------------------------------------------------------------
-
-    /**
-     * Decode a single ASCII encoded string which may be padded with NULL bytes.
-     * Multiple strings which were encoded as a single comma separated string are
-     * returned unexploded.
-     * <p>
-     * Reads directly from underlying byte buffer to avoid unnecessary array copies.
-     *
-     * @param size
-     * @return
-     */
-    public String decodeUnexplodedString(final int size) {
-        // Get our current position in the buffer so we can index directly into it
-        final int currentBufferPosition = recordBytes.length - recordStream.available();
-
-        // Scan for first NULL padding byte
-        int realLength = 0;
-        for (; realLength < size; realLength++)
-            if (recordBytes[currentBufferPosition + realLength] == '\0') break;
-
-        // Jump over all bytes, including NULL padding
-        recordStream.skip(size);
-        return new String(recordBytes, currentBufferPosition, realLength);
-    }
-
-    public byte[] decodeRawBytes(final int size) throws IOException {
-        final byte[] bytes = new byte[size];
-        recordStream.read(bytes);
-        return bytes;
-    }
-
-    /**
-     * Decode a list of ASCII encoded strings.
-     * Multiple strings which were encoded as a single comma separated string are
-     * exploded. If only a single string was encoded with no commas, returns a
-     * list of length 1.
-     * <p>
-     * Reads directly from underlying byte buffer to avoid unnecessary array copies.
-     *
-     * @param size
-     * @return
-     */
-    public List<String> decodeExplodedStrings(final int size) {
-        // Get our current position in the buffer so we can index directly into it
-        final int currentBufferPosition = recordBytes.length - recordStream.available();
-
-        int numStrings = 1;
-        // Start at offset 1 to avoid counting optional leading comma
-        // Real length may be shorter than provided one because of NULL padding
-        int realLength = 1;
-        for (; realLength < size; realLength++) {
-            final byte currentByte = recordBytes[currentBufferPosition + realLength];
-            if (currentByte == ',') numStrings++;
-            else if (currentByte == '\0') break;
-        }
-
-        final List<String> strings = new ArrayList<>(numStrings);
-        int currentStringStart = recordBytes[currentBufferPosition] == ',' ? 1 : 0;
-        for (int i = 1; i < realLength; i++) {
-            if (recordBytes[currentBufferPosition + i] == ',') {
-                strings.add(new String(recordBytes, currentBufferPosition + currentStringStart, i - currentStringStart));
-                currentStringStart = i + 1;
-            }
-        }
-        // Add final string
-        strings.add(new String(recordBytes, currentBufferPosition + currentStringStart, realLength - currentStringStart));
-
-        // Jump over all bytes
-        recordStream.skip(size);
-        return strings;
-    }
-
-    private Object decodeLiteralString(final int size) {
-        assert size > 0;
-
-        // TODO -- assumes size > 0
-        final byte[] bytes = new byte[size]; // TODO -- in principle should just grab bytes from underlying array
-        try {
-            recordStream.read(bytes);
-
-            int goodLength = 0;
-            for (; goodLength < bytes.length; goodLength++)
-                if (bytes[goodLength] == 0) break;
-
-            if (goodLength == 0)
-                return null;
-            else {
-                final String s = new String(bytes, 0, goodLength);
-                return BCF2Utils.isCollapsedString(s) ? BCF2Utils.explodeStringList(s) : s;
-            }
-        } catch (final IOException e) {
-            throw new TribbleException("readByte failure", e);
-        }
-    }
 
     public final int decodeNumberOfElements(final byte typeDescriptor) throws IOException {
         if (BCF2Utils.sizeIsOverflow(typeDescriptor))
@@ -332,6 +228,8 @@ public abstract class BCF2Decoder {
      * in the case of GT in BCF 2.1, the vector may be MISSING padded if the
      * sample ploidy is less than the maximum, but these missing values are
      * not considered to be part of the array, and will not be returned).
+     * Parts of the decoder that require missing values to be preserved should
+     * use decodeTyped
      * <p>
      * If size == 0 =&gt; result is null
      * If size &gt; 0 =&gt; result depends on the actual values in the stream
@@ -345,7 +243,121 @@ public abstract class BCF2Decoder {
      *                  int elements are still forced to do a fresh allocation as well.
      * @return see description
      */
-    public abstract int[] decodeIntArray(final int size, final BCF2Type type, int[] maybeDest) throws IOException;
+    public int[] decodeIntArray(final int size, final BCF2Type type, int[] maybeDest) throws IOException {
+        if (size == 0) {
+            return null;
+        } else {
+            if (maybeDest != null && maybeDest.length < size)
+                maybeDest = null; // by nulling this out we ensure that we do fresh allocations as maybeDest is too small
+
+            final int val1 = decodeInt(type);
+            if (val1 == getPaddingValue(type)) {
+                // Fast path for first element being padding, meaning the whole array is empty
+                final int bytesToDrop = type.getSizeInBytes() * (size - 1);
+                // Skip the rest of the padding values
+                recordStream.skip(bytesToDrop);
+                return null;
+            } else {
+                // we know we will have at least 1 element, so making the int[] is worth it
+                final int[] ints = maybeDest == null ? new int[size] : maybeDest;
+                for (int i = 1; i < size; i++) {
+                    ints[i] = decodeInt(type);
+                    if (ints[i] == getPaddingValue(type)) {
+                        final int bytesToDrop = type.getSizeInBytes() * (size - (i + 1));
+                        // Skip the rest of the padding values
+                        recordStream.skip(bytesToDrop);
+                        // deal with auto-pruning by returning an int[] containing
+                        // only the non-padding values.  We do this by copying the first
+                        // i elements, as i itself is missing
+                        return Arrays.copyOf(ints, i);
+                    }
+                }
+                return ints; // all of the elements were non-padding
+            }
+        }
+    }
+
+    public byte[] decodeRawBytes(final int size) throws IOException {
+        final byte[] bytes = new byte[size];
+        recordStream.read(bytes);
+        return bytes;
+    }
+
+    /**
+     * Decode a single ASCII encoded string which may be padded with NULL bytes.
+     * Multiple strings which were encoded as a single comma separated string are
+     * returned unexploded.
+     * <p>
+     * Reads directly from underlying byte buffer to avoid unnecessary array copies.
+     *
+     * @param size
+     * @return
+     */
+    public String decodeUnexplodedString(final int size) {
+        // Get our current position in the buffer so we can index directly into it
+        final int currentBufferPosition = recordBytes.length - recordStream.available();
+
+        // Jump over all bytes, including NULL padding
+        recordStream.skip(size);
+
+        // Scan for first NULL padding byte
+        int realLength = 0;
+        for (; realLength < size; realLength++)
+            if (recordBytes[currentBufferPosition + realLength] == '\0') break;
+
+        return new String(recordBytes, currentBufferPosition, realLength);
+    }
+
+    public String decodeUnexplodedString() throws IOException {
+        final byte typeDescriptor = readTypeDescriptor();
+        final int size = decodeNumberOfElements(typeDescriptor);
+
+        return decodeUnexplodedString(size);
+    }
+
+    /**
+     * Decode a list of ASCII encoded strings.
+     * Multiple strings which were encoded as a single comma separated string are
+     * exploded. If only a single string was encoded with no commas, returns a
+     * list of length 1.
+     * <p>
+     * Reads directly from underlying byte buffer to avoid unnecessary array copies.
+     *
+     * @param size
+     * @return
+     */
+    public List<String> decodeExplodedStrings(final int size) {
+        // Get our current position in the buffer so we can index directly into it
+        final int currentBufferPosition = recordBytes.length - recordStream.available();
+
+        // Jump over all bytes
+        recordStream.skip(size);
+
+        if (size == 0 || recordBytes[currentBufferPosition] == '\0') return Collections.emptyList();
+
+        int numStrings = 1;
+        // Start at offset 1 to avoid counting optional leading comma
+        // Real length may be shorter than provided one because of NULL padding
+        int realLength = 1;
+        for (; realLength < size; realLength++) {
+            final byte currentByte = recordBytes[currentBufferPosition + realLength];
+            if (currentByte == ',') numStrings++;
+            else if (currentByte == '\0') break;
+        }
+
+        final List<String> strings = new ArrayList<>(numStrings);
+        int currentStringStart = recordBytes[currentBufferPosition] == ',' ? 1 : 0;
+        for (int i = 1; i < realLength; i++) {
+            if (recordBytes[currentBufferPosition + i] == ',') {
+                strings.add(new String(recordBytes, currentBufferPosition + currentStringStart, i - currentStringStart));
+                currentStringStart = i + 1;
+            }
+        }
+        // Add final string
+        strings.add(new String(recordBytes, currentBufferPosition + currentStringStart, realLength - currentStringStart));
+
+        return strings;
+    }
 
     public final int[] decodeIntArray(final byte typeDescriptor, final int size) throws IOException {
         final BCF2Type type = BCF2Utils.decodeType(typeDescriptor);
@@ -428,45 +440,20 @@ public abstract class BCF2Decoder {
     }
 
     public final byte readTypeDescriptor() throws IOException {
-        return BCF2Utils.readByte(recordStream);
+        return (byte) recordStream.read();
     }
+
+
+    // ----------------------------------------------------------------------
+    //
+    // Version specific behavior
+    //
+    // ----------------------------------------------------------------------
+
 
     public abstract int getPaddingValue(final BCF2Type type);
 
     public static class BCF2_1Decoder extends BCF2Decoder {
-
-        @Override
-        public final int[] decodeIntArray(final int size, final BCF2Type type, int[] maybeDest) throws IOException {
-            if (size == 0) {
-                return null;
-            } else {
-                if (maybeDest != null && maybeDest.length < size)
-                    maybeDest = null; // by nulling this out we ensure that we do fresh allocations as maybeDest is too small
-
-                final int val1 = decodeInt(type);
-                if (val1 == type.getMissingBytes()) {
-                    // fast path for first element being missing
-                    for (int i = 1; i < size; i++) decodeInt(type);
-                    return null;
-                } else {
-                    // we know we will have at least 1 element, so making the int[] is worth it
-                    final int[] ints = maybeDest == null ? new int[size] : maybeDest;
-                    ints[0] = val1; // we already read the first one
-                    for (int i = 1; i < size; i++) {
-                        ints[i] = decodeInt(type);
-                        if (ints[i] == type.getMissingBytes()) {
-                            // read the rest of the missing values, dropping them
-                            for (int j = i + 1; j < size; j++) decodeInt(type);
-                            // deal with auto-pruning by returning an int[] containing
-                            // only the non-MISSING values.  We do this by copying the first
-                            // i elements, as i itself is missing
-                            return Arrays.copyOf(ints, i);
-                        }
-                    }
-                    return ints; // all of the elements were non-MISSING
-                }
-            }
-        }
 
         @Override
         public int getPaddingValue(final BCF2Type type) {
@@ -475,63 +462,6 @@ public abstract class BCF2Decoder {
     }
 
     public static class BCF2_2Decoder extends BCF2Decoder {
-
-        @Override
-        public final int[] decodeIntArray(final int size, final BCF2Type type, int[] maybeDest) throws IOException {
-            if (size == 0) {
-                return null;
-            } else {
-                if (maybeDest != null && maybeDest.length < size)
-                    maybeDest = null; // by nulling this out we ensure that we do fresh allocations as maybeDest is too small
-
-                final int val1 = decodeInt(type);
-                if (val1 == type.getMissingBytes()) {
-                    // fast path for first element being missing
-                    for (int i = 1; i < size; i++) decodeInt(type);
-                    return null;
-                } else {
-                    // we know we will have at least 1 element, so making the int[] is worth it
-                    final int[] ints = maybeDest == null ? new int[size] : maybeDest;
-                    ints[0] = val1; // we already read the first one
-                    for (int i = 1; i < size; i++) {
-                        ints[i] = decodeInt(type);
-                        if (ints[i] == type.getMissingBytes()) {
-                            // Skip the rest of the EOV values
-                            final int bytesToDrop = (size - (i + 1)) * type.getSizeInBytes();
-                            recordStream.skip(bytesToDrop);
-                            for (int j = i + 1; j < size; j++) decodeInt(type);
-                            // deal with auto-pruning by returning an int[] containing
-                            // only the non-EOV values.  We do this by copying the first
-                            // i elements, as i itself is missing
-                            return Arrays.copyOf(ints, i);
-                        }
-                    }
-                    return ints; // all of the elements were non-EOV
-                }
-            }
-            //            if (size == 0) {
-//                return null;
-//            } else {
-//                if (maybeDest != null && maybeDest.length < size)
-//                    maybeDest = null; // by nulling this out we ensure that we do fresh allocations as maybeDest is too small
-//
-//                // we know we will have at least 1 element, so making the int[] is worth it
-//                final int[] ints = maybeDest == null ? new int[size] : maybeDest;
-//                for (int i = 0; i < size; i++) {
-//                    ints[i] = decodeInt(type);
-//                    if (ints[i] == type.getEOVBytes()) {
-//                        final int bytesToDrop = type.getSizeInBytes() * (size - (i + 1));
-//                        // Skip the rest of the EOV values
-//                        recordStream.skip(bytesToDrop);
-//                        // deal with auto-pruning by returning an int[] containing
-//                        // only the non-MISSING values.  We do this by copying the first
-//                        // i elements, as i itself is missing
-//                        return Arrays.copyOf(ints, i);
-//                    }
-//                }
-//                return ints; // all of the elements were non-EOV
-//            }
-        }
 
         @Override
         public int getPaddingValue(final BCF2Type type) {

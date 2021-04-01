@@ -43,7 +43,6 @@ import htsjdk.variant.variantcontext.VariantContextBuilder;
 import htsjdk.variant.variantcontext.VariantContextUtils;
 import htsjdk.variant.vcf.VCFCodec;
 import htsjdk.variant.vcf.VCFCompoundHeaderLine;
-import htsjdk.variant.vcf.VCFContigHeaderLine;
 import htsjdk.variant.vcf.VCFHeader;
 import htsjdk.variant.vcf.VCFHeaderLineType;
 
@@ -61,6 +60,8 @@ import java.util.Map;
  * Decode BCF2 files
  */
 public class BCF2Codec extends BinaryFeatureCodec<VariantContext> {
+    public static String IDXField = "IDX"; // BCF2.2 IDX field name
+
     protected final static int ALLOWED_MAJOR_VERSION = 2;
     protected final static int ALLOWED_MINOR_VERSION = 2;
     public static final BCFVersion ALLOWED_BCF_VERSION = new BCFVersion(ALLOWED_MAJOR_VERSION, ALLOWED_MINOR_VERSION);
@@ -77,14 +78,14 @@ public class BCF2Codec extends BinaryFeatureCodec<VariantContext> {
     /**
      * Maps offsets (encoded in BCF) into contig names (from header) for the CHROM field
      */
-    private final ArrayList<String> contigNames = new ArrayList<>();
+    private BCF2Dictionary contigDictionary;
 
     /**
      * Maps header string names (encoded in VCF) into strings found in the BCF header
      * <p>
      * Initialized when processing the header
      */
-    private ArrayList<String> dictionary;
+    private BCF2Dictionary stringDictionary;
 
     /**
      * Our decoder that reads low-level objects from the BCF2 records
@@ -183,20 +184,17 @@ public class BCF2Codec extends BinaryFeatureCodec<VariantContext> {
             throw new TribbleException("I/O error while reading BCF2 header");
         }
 
-        // create the config offsets
-        if (!header.getContigLines().isEmpty()) {
-            contigNames.clear();
-            for (final VCFContigHeaderLine contig : header.getContigLines()) {
-                if (contig.getID() == null || contig.getID().equals(""))
-                    error("found a contig with an invalid ID " + contig);
-                contigNames.add(contig.getID());
-            }
-        } else {
-            error("Didn't find any contig lines in BCF2 file header");
+        // TODO should follow up on hts-specs and clarify the relationship between ##dictionary and IDX fields
+        // Error on ##dictionary lines, we don't know what to do with them
+        if (this.header.getMetaDataInInputOrder().stream().anyMatch(line -> line.getKey().equals("dictionary"))) {
+            throw new TribbleException("Use of the ##dictionary line is not supported");
         }
 
+        // create the contig dictionary
+        contigDictionary = makeContigDictionary(bcfVersion);
+
         // create the string dictionary
-        dictionary = parseDictionary(header);
+        stringDictionary = makeStringDictionary(bcfVersion);
 
         // prepare the genotype field decoders
         gtFieldDecoders = new BCF2GenotypeFieldDecoders(header);
@@ -212,14 +210,14 @@ public class BCF2Codec extends BinaryFeatureCodec<VariantContext> {
         return new FeatureCodecHeader(header, inputStream.getPosition());
     }
 
-    // TODO: this is broken
-    // First, the version check is too permissive - it accepts any minor version, including BCF 2.2,
-    // which it shouldn't without checking version compatibility.
-    // Second, it doesn't recognize that BCF can be block gzipped, so it rejects
-    // those files because the header never matches, but only because the stream isn't decompressed.
-    // TODO: call validateVersionCompatibility here instead to remedy #1 above
     @Override
     public boolean canDecode(final String path) {
+        // TODO: this is broken
+        // First, the version check is too permissive - it accepts any minor version, including BCF 2.2,
+        // which it shouldn't without checking version compatibility.
+        // Second, it doesn't recognize that BCF can be block gzipped, so it rejects
+        // those files because the header never matches, but only because the stream isn't decompressed.
+        // TODO: call validateVersionCompatibility here instead to remedy #1 above
         try (final InputStream fis = Files.newInputStream(IOUtil.getPath(path))) {
             final BCFVersion version = BCFVersion.readBCFVersion(fis);
             return version != null && version.getMajorVersion() == ALLOWED_MAJOR_VERSION;
@@ -323,7 +321,7 @@ public class BCF2Codec extends BinaryFeatureCodec<VariantContext> {
      * @param builder
      */
     private void decodeID(final VariantContextBuilder builder) throws IOException {
-        final String id = (String) decoder.decodeTypedValue();
+        final String id = decoder.decodeUnexplodedString();
 
         if (id == null)
             builder.noID();
@@ -411,7 +409,9 @@ public class BCF2Codec extends BinaryFeatureCodec<VariantContext> {
             final String key = getDictionaryString();
             Object value = decoder.decodeTypedValue();
             final VCFCompoundHeaderLine metaData = VariantContextUtils.getMetaDataForField(header, key);
-            if (metaData.getType() == VCFHeaderLineType.Flag) value = true; // special case for flags
+            if (metaData.getType() == VCFHeaderLineType.Flag && value != null) {
+                value = Boolean.TRUE; // special case for flags
+            }
             infoFieldEntries.put(key, value);
         }
 
@@ -460,12 +460,22 @@ public class BCF2Codec extends BinaryFeatureCodec<VariantContext> {
         }
     }
 
-    private final String getDictionaryString() throws IOException {
+    private String getDictionaryString() throws IOException {
         return getDictionaryString((Integer) decoder.decodeTypedValue());
     }
 
     protected final String getDictionaryString(final int offset) {
-        return dictionary.get(offset);
+        return stringDictionary.get(offset);
+    }
+
+    private BCF2Dictionary makeStringDictionary(final BCFVersion bcfVersion) {
+        final BCF2Dictionary dict = BCF2Dictionary.makeBCF2StringDictionary(header, bcfVersion);
+
+        // if we got here we never found a dictionary, or there are no elements in the dictionary
+        if (dict.isEmpty())
+            error("Dictionary header element was absent or empty");
+
+        return dict;
     }
 
     /**
@@ -475,18 +485,16 @@ public class BCF2Codec extends BinaryFeatureCodec<VariantContext> {
      * @param contigOffset
      * @return
      */
-    private final String lookupContigName(final int contigOffset) {
-        return contigNames.get(contigOffset);
+    private String lookupContigName(final int contigOffset) {
+        return contigDictionary.get(contigOffset);
     }
 
-    private final ArrayList<String> parseDictionary(final VCFHeader header) {
-        final ArrayList<String> dict = BCF2Utils.makeDictionary(header);
+    private BCF2Dictionary makeContigDictionary(final BCFVersion bcfVersion) {
+        // create the config offsets
+        if (header.getContigLines().isEmpty())
+            error("Didn't find any contig lines in BCF2 file header");
 
-        // if we got here we never found a dictionary, or there are no elements in the dictionary
-        if (dict.isEmpty())
-            error("Dictionary header element was absent or empty");
-
-        return dict;
+        return BCF2Dictionary.makeBCF2ContigDictionary(header, bcfVersion);
     }
 
     /**

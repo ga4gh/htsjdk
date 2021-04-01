@@ -53,47 +53,54 @@ public enum BCF2Type {
     INT8(1, 1, 0xFFFFFF80, 0xFFFFFF81, -127, 127) {
         @Override
         public int read(final InputStream in) throws IOException {
-            return BCF2Utils.readByte(in);
+            // This cast to byte then implicit cast back to int is needed so that negative
+            // integers are sign extended to their proper 32 bit representation.
+            // The integer read from the stream before truncating to byte is an 8 bit integer
+            // with the 3 high bytes 0, the widening conversion performs sign extension.
+            return (byte) in.read();
         }
 
         @Override
         public void write(final int value, final OutputStream out) throws IOException {
-            out.write(0xFF & value);   // TODO -- do we need this operation?
+            // Do not need to mask off higher bits because Java's OutputStream contract is to
+            // only write the bottom 8 bits of the passed in int, the same applies to the write
+            // methods of the larger int sizes below
+            out.write(value);
         }
     },
 
     INT16(2, 2, 0xFFFF8000, 0xFFFF8001, -32767, 32767) {
         @Override
         public int read(final InputStream in) throws IOException {
-            final int b2 = BCF2Utils.readByte(in) & 0xFF;
-            final int b1 = BCF2Utils.readByte(in) & 0xFF;
+            final int b2 = in.read();
+            final int b1 = in.read();
             return (short) ((b1 << 8) | b2);
         }
 
         @Override
         public void write(final int value, final OutputStream out) throws IOException {
             // TODO -- optimization -- should we put this in a local buffer?
-            out.write((0x00FF & value));
-            out.write((0xFF00 & value) >> 8);
+            out.write(value);
+            out.write(value >> 8);
         }
     },
 
     INT32(3, 4, 0x80000000, 0x80000001, -2147483647, 2147483647) {
         @Override
         public int read(final InputStream in) throws IOException {
-            final int b4 = BCF2Utils.readByte(in) & 0xFF;
-            final int b3 = BCF2Utils.readByte(in) & 0xFF;
-            final int b2 = BCF2Utils.readByte(in) & 0xFF;
-            final int b1 = BCF2Utils.readByte(in) & 0xFF;
+            final int b4 = in.read();
+            final int b3 = in.read();
+            final int b2 = in.read();
+            final int b1 = in.read();
             return b1 << 24 | b2 << 16 | b3 << 8 | b4;
         }
 
         @Override
         public void write(final int value, final OutputStream out) throws IOException {
-            out.write((0x000000FF & value));
-            out.write((0x0000FF00 & value) >> 8);
-            out.write((0x00FF0000 & value) >> 16);
-            out.write((0xFF000000 & value) >> 24);
+            out.write(value);
+            out.write(value >> 8);
+            out.write(value >> 16);
+            out.write(value >> 24);
         }
     },
 
@@ -109,6 +116,9 @@ public enum BCF2Type {
         }
     },
 
+    // CHAR isn't given a MISSING or EOV value in the spec, but for the purposes of
+    // padding strings (i.e. variable length vectors of chars), it is treated as if
+    // '\0' or NULL is both the MISSING and EOV value of CHAR
     CHAR(7, 1, 0x00000000) {
         @Override
         public int read(final InputStream in) throws IOException {
@@ -137,6 +147,7 @@ public enum BCF2Type {
     private final int missingBytes;
     private final int EOVBytes;
     private final int sizeInBytes;
+
     private final long minValue, maxValue;
 
     BCF2Type(final int id, final int sizeInBytes, final int missingBytes) {
@@ -180,7 +191,7 @@ public enum BCF2Type {
      * @return
      */
     public final boolean withinRange(final long v) {
-        return v >= minValue && v <= maxValue;
+        return v <= maxValue && v >= minValue;
     }
 
     /**
