@@ -82,9 +82,11 @@ public class AbstractVCFCodecTest extends VariantBaseTest {
 	public Object[][] otherHeaderLines() {
 		return new Object[][] {
                 { "key=<", new VCFHeaderLine("key", "<") },
-                // technically, this is invalid due to the lack of an "ID attribute, but it should still parse
-                { "ID=<ID=\"1\", Description=\"ClinVar Variation ID\">", new VCFSimpleHeaderLine(
-                        "ID", "<ID=1,Description=\"ClinVar Variation ID\">", VCFHeaderVersion.VCF4_2) },
+                // taken from Funcotator test file as ##ID=<Description="ClinVar Variation ID">
+                // technically, this is invalid due to the lack of an "ID" attribute, but it should still parse
+                // into a VCFHeaderLine (but noa VCFSimpleHeaderLine
+                { "ID=<Description=\"ClinVar Variation ID\">",
+                    new VCFHeaderLine("ID", "<Description=\"ClinVar Variation ID\">") },
 		};
 	}
 
