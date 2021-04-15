@@ -177,7 +177,8 @@ public final class BCF2UtilsUnitTest extends VariantBaseTest {
         final List<Integer> ids = new ArrayList<Integer>();
         for ( final VCFHeaderLine line : combinationHeader.getMetaDataInInputOrder() ) {
             if ( line.isIDHeaderLine()) {
-                ids.add(Integer.valueOf(line.getID()));
+                // Substring to strip off "l" prefix
+                ids.add(Integer.valueOf(line.getID().substring(1)));
             }
         }
 
