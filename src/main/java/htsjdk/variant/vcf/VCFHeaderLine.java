@@ -135,7 +135,7 @@ public class VCFHeaderLine implements Comparable, Serializable {
      */
     protected static void validateKeyOrID(final String keyString, final String sourceName) {
         Utils.nonNull(sourceName);
-        if (keyString == null) {
+        if (keyString == null || keyString.isEmpty()) {
             throw new TribbleException(
                     String.format("VCFHeaderLine: %s cannot be null or empty", sourceName));
         }

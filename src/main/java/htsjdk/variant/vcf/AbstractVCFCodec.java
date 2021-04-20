@@ -358,7 +358,7 @@ public abstract class AbstractVCFCodec extends AsciiFeatureCodec<VariantContext>
         } else {
             final String headerLineValue = headerLineString.substring(indexOfEquals + 1).trim();
             if (headerLineValue.startsWith("<") && headerLineValue.endsWith(">") &&
-                    sourceVersion.isAtLeastAsRecentAs((VCFHeaderVersion.VCF4_3))) {
+                sourceVersion.isAtLeastAsRecentAs((VCFHeaderVersion.VCF4_3))) {
                 // Model all "other" header lines as VCFSimpleHeaderLine starting with 4.3, but
                 // for pre-v4.3, use VCFHeaderLine. This is to accommodate older files that contain
                 // lines with structured header line syntax ("<>" delimited) but which do not contain
