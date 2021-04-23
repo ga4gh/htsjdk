@@ -64,7 +64,7 @@ public class BCF2EncoderDecoderUnitTest extends VariantBaseTest {
         primitives.add(new BCF2TypedValue(-1, BCF2Type.INT8));
         primitives.add(new BCF2TypedValue(100, BCF2Type.INT8));
         primitives.add(new BCF2TypedValue(-100, BCF2Type.INT8));
-        primitives.add(new BCF2TypedValue(-127, BCF2Type.INT8));    // last value in range
+        primitives.add(new BCF2TypedValue(-120, BCF2Type.INT8));    // last value in range
         primitives.add(new BCF2TypedValue(127, BCF2Type.INT8));    // last value in range
 
         // medium ints
@@ -72,7 +72,7 @@ public class BCF2EncoderDecoderUnitTest extends VariantBaseTest {
         primitives.add(new BCF2TypedValue(1000, BCF2Type.INT16));
         primitives.add(new BCF2TypedValue(-128, BCF2Type.INT16));    // first value in range
         primitives.add(new BCF2TypedValue(128, BCF2Type.INT16));    // first value in range
-        primitives.add(new BCF2TypedValue(-32767, BCF2Type.INT16)); // last value in range
+        primitives.add(new BCF2TypedValue(-32760, BCF2Type.INT16)); // last value in range
         primitives.add(new BCF2TypedValue(32767, BCF2Type.INT16)); // last value in range
 
         // larger ints
@@ -80,7 +80,7 @@ public class BCF2EncoderDecoderUnitTest extends VariantBaseTest {
         primitives.add(new BCF2TypedValue(32768, BCF2Type.INT32)); // first value in range
         primitives.add(new BCF2TypedValue(-100000, BCF2Type.INT32));
         primitives.add(new BCF2TypedValue(100000, BCF2Type.INT32));
-        primitives.add(new BCF2TypedValue(-2147483647, BCF2Type.INT32));
+        primitives.add(new BCF2TypedValue(-2147483640, BCF2Type.INT32));
         primitives.add(new BCF2TypedValue(2147483647, BCF2Type.INT32));
 
         // floats

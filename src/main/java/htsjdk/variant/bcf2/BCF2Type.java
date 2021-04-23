@@ -50,26 +50,27 @@ public enum BCF2Type {
         }
     },
 
-    INT8(1, 1, 0xFFFFFF80, 0xFFFFFF81, -127, 127) {
+    INT8(1, 1, 0xFFFFFF80, 0xFFFFFF81, -120, 127) {
         @Override
         public int read(final InputStream in) throws IOException {
             // This cast to byte then implicit cast back to int is needed so that negative
             // integers are sign extended to their proper 32 bit representation.
             // The integer read from the stream before truncating to byte is an 8 bit integer
-            // with the 3 high bytes 0, the widening conversion performs sign extension.
+            // with the 3 high bytes 0, and the widening conversion performs sign extension,
+            // the same applies for the read method of INT16.
             return (byte) in.read();
         }
 
         @Override
         public void write(final int value, final OutputStream out) throws IOException {
-            // Do not need to mask off higher bits because Java's OutputStream contract is to
-            // only write the bottom 8 bits of the passed in int, the same applies to the write
-            // methods of the larger int sizes below
+            // Do not need to mask off higher bytes because Java's OutputStream contract is to
+            // only write the bottom byte of the passed in int, the same applies to the write
+            // methods of the larger int sizes below.
             out.write(value);
         }
     },
 
-    INT16(2, 2, 0xFFFF8000, 0xFFFF8001, -32767, 32767) {
+    INT16(2, 2, 0xFFFF8000, 0xFFFF8001, -32760, 32767) {
         @Override
         public int read(final InputStream in) throws IOException {
             final int b2 = in.read();
@@ -85,7 +86,7 @@ public enum BCF2Type {
         }
     },
 
-    INT32(3, 4, 0x80000000, 0x80000001, -2147483647, 2147483647) {
+    INT32(3, 4, 0x80000000, 0x80000001, -2147483640, 2147483647) {
         @Override
         public int read(final InputStream in) throws IOException {
             final int b4 = in.read();
