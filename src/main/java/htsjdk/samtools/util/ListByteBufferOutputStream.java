@@ -113,7 +113,7 @@ public class ListByteBufferOutputStream extends OutputStream {
     public void reset() {
         currentBlock = blocks.get(0);
         nextBytePosition = 0;
-        nextBlockIndex = 0;
+        nextBlockIndex = 1;
         size = 0;
     }
 
